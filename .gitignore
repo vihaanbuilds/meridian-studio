@@ -14,3 +14,6 @@ DerivedData/
 # Editors
 .vscode/
 .idea/
+
+# Local git worktrees used for isolated feature work
+.worktrees/
