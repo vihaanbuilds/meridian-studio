@@ -1653,15 +1653,18 @@ extension AppState {
         panel.nameFieldStringValue = "Untitled.mstudio"
         panel.prompt = "Save"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        persist(to: url)
+        guard persist(to: url) else { return }
         fileURL = url
     }
 
-    private func persist(to url: URL) {
+    @discardableResult
+    private func persist(to url: URL) -> Bool {
         do {
             try ProjectStore.save(document.project, to: url)
+            return true
         } catch {
             presentError(error)
+            return false
         }
     }
 
