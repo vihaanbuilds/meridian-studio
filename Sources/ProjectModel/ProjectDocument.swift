@@ -28,7 +28,13 @@ public final class ProjectDocument: ObservableObject {
     }
 
     public func setTempo(_ tempo: Double) {
-        project.tempo = tempo
+        // Clamp to a small positive floor: `Tempo.seconds(forBeats:tempo:)` divides by
+        // tempo, so a zero or non-finite value here produces NaN/Infinity downstream
+        // (e.g. in PlaybackEngine.play's UInt64(seconds * 1e9) conversion, which traps).
+        // 1 BPM is non-musical but always finite and positive. Note: Swift's global
+        // `max` does NOT clamp NaN (max(.nan, 1) == .nan, since NaN comparisons are
+        // always false), so NaN needs its own explicit check here.
+        project.tempo = tempo.isFinite ? max(tempo, 1) : 1
     }
 
     public func replaceProject(_ newProject: Project) {
