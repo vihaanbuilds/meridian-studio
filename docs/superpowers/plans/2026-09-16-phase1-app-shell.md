@@ -1072,11 +1072,13 @@ public final class CoreMIDIInput {
         guard let readProcRefCon else { return }
         let input = Unmanaged<CoreMIDIInput>.fromOpaque(readProcRefCon).takeUnretainedValue()
 
-        var packet = packetListPointer.pointee.packet
+        let mutableListPointer = UnsafeMutablePointer(mutating: packetListPointer)
+        var packetPointer = withUnsafeMutablePointer(to: &mutableListPointer.pointee.packet) { $0 }
+
         for _ in 0..<packetListPointer.pointee.numPackets {
             let hostTime = mach_absolute_time()
-            let length = Int(packet.length)
-            withUnsafeBytes(of: packet.data) { rawBuffer in
+            let length = Int(packetPointer.pointee.length)
+            withUnsafeBytes(of: packetPointer.pointee.data) { rawBuffer in
                 var offset = 0
                 while offset + 2 < length {
                     let status = rawBuffer[offset]
@@ -1087,7 +1089,7 @@ public final class CoreMIDIInput {
                     offset += 3
                 }
             }
-            packet = MIDIPacketNext(&packet)
+            packetPointer = MIDIPacketNext(packetPointer)
         }
     }
 }
