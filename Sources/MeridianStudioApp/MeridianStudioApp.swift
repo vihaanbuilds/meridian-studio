@@ -17,5 +17,18 @@ struct MeridianStudioApp: App {
                 .environmentObject(appState)
                 .frame(minWidth: 800, minHeight: 500)
         }
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Project") { appState.newProject() }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button("Open…") { appState.openProject() }
+                    .keyboardShortcut("o", modifiers: .command)
+                Divider()
+                Button("Save") { appState.saveProject() }
+                    .keyboardShortcut("s", modifiers: .command)
+                Button("Save As…") { appState.saveProjectAs() }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
+        }
     }
 }
