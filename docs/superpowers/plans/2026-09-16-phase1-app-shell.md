@@ -1219,7 +1219,7 @@ final class RecordAndPersistIntegrationTests: XCTestCase {
         XCTAssertEqual(reopened, document.project)
         XCTAssertEqual(reopened.tracks[0].regions[0].notes.count, 2)
         XCTAssertEqual(reopened.tracks[0].regions[0].notes[0], NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1))
-        XCTAssertEqual(reopened.tracks[0].regions[0].notes[1], NoteEvent(pitch: 64, velocity: 90, startBeat: 0, lengthBeats: 2))
+        XCTAssertEqual(reopened.tracks[0].regions[0].notes[1], NoteEvent(pitch: 64, velocity: 90, startBeat: 1, lengthBeats: 1))
     }
 }
 ```
