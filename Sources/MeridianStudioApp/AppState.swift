@@ -13,12 +13,24 @@ final class AppState: ObservableObject {
     @Published var isRecording = false
     @Published var fileURL: URL?
 
+    /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
+    /// `Date` they were pressed. This is a *live visual cue only* — deliberately
+    /// independent of `MIDIRecorder`, which owns the beat-accurate recorded data.
+    /// It is maintained whether or not recording is active, so playing a key is
+    /// visible in the piano roll immediately rather than only after Stop.
+    @Published private(set) var liveNotes: [UInt8: Date] = [:]
+
     let midiInput = CoreMIDIInput()
     let playbackEngine = PlaybackEngine()
     private let recorder: MIDIRecorder
     private let recordingClock = RecordingClock()
+    /// Drains `midiInput.queue` continuously, recording or not. Runs for the whole
+    /// app lifetime: if it only ran while recording, the queue would silently fill
+    /// and drop events, and live input would be invisible outside a take.
     private var pollTimer: Timer?
     private var documentCancellable: AnyCancellable?
+
+    private static let queuePollInterval: TimeInterval = 0.01
 
     init() {
         let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
@@ -38,6 +50,8 @@ final class AppState: ObservableObject {
         } catch {
             print("Playback engine unavailable: \(error)")
         }
+
+        startQueuePolling()
     }
 
     private func bindDocument() {
@@ -47,34 +61,49 @@ final class AppState: ObservableObject {
         }
     }
 
+    // A `@MainActor` class cannot touch isolated stored properties from its
+    // nonisolated `deinit`, so the timer tears itself down instead: it holds `self`
+    // weakly and invalidates once the state object is gone.
+    private func startQueuePolling() {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.queuePollInterval, repeats: true) { [weak self] timer in
+            guard let self else {
+                timer.invalidate()
+                return
+            }
+            Task { @MainActor in self.drainMIDIQueue() }
+        }
+    }
+
     func toggleRecording() {
         isRecording ? stopRecording() : startRecording()
     }
 
     private func startRecording() {
-        // Discard anything already queued from before the take started: those
-        // messages would otherwise be timestamped against the new recording clock
-        // and folded into this take at the wrong beat positions.
-        _ = midiInput.queue.drain()
+        // Clear anything already queued from before the take started: those messages
+        // would otherwise be timestamped against the new recording clock and folded
+        // into this take at the wrong beat positions. `isRecording` is still false
+        // here, so this drain feeds nothing to the recorder — it only keeps the
+        // live-note highlight in sync, which a bare `queue.drain()` discard would
+        // desync by swallowing a note-off.
+        drainMIDIQueue()
         recordingClock.tempo = document.project.tempo
         recorder.reset()
         recordingClock.startDate = Date()
         isRecording = true
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.drainMIDIQueue() }
-        }
     }
 
     private func stopRecording() {
-        isRecording = false
-        pollTimer?.invalidate()
-        pollTimer = nil
-        // Drain *before* clearing `startDate`: `RecordingClock.beatsElapsed()`
-        // returns 0 once `startDate` is nil, so any note-off still sitting in the
-        // queue would otherwise be timestamped at beat 0 instead of the real stop
-        // time, producing a bogus zero-or-negative-length note.
+        // Drain first, while `isRecording` is still true and `startDate` is still
+        // set. Two orderings matter here:
+        //  - `isRecording` must stay true or `drainMIDIQueue()` would route the
+        //    tail of the take to the live-note display only, never the recorder.
+        //  - `startDate` must stay set because `RecordingClock.beatsElapsed()`
+        //    returns 0 once it is nil, which would stamp every queued note-off at
+        //    beat 0 and yield bogus zero-or-negative-length notes.
         drainMIDIQueue()
         let finalBeat = recordingClock.beatsElapsed()
+        isRecording = false
         // Keys still held at Stop have no note-off; close them out at the stop beat.
         recorder.finalize(atBeat: finalBeat)
         recordingClock.startDate = nil
@@ -87,7 +116,24 @@ final class AppState: ObservableObject {
 
     private func drainMIDIQueue() {
         for message in midiInput.queue.drain() {
-            recorder.handle(MIDIMessageParser.parse(message))
+            let event = MIDIMessageParser.parse(message)
+            updateLiveNotes(with: event)
+            // The recorder only sees events during an actual take; the live-note
+            // state above is maintained regardless.
+            if isRecording {
+                recorder.handle(event)
+            }
+        }
+    }
+
+    private func updateLiveNotes(with event: ParsedMIDIEvent) {
+        switch event {
+        case .noteOn(let pitch, _, _):
+            liveNotes[pitch] = Date()
+        case .noteOff(let pitch, _):
+            liveNotes.removeValue(forKey: pitch)
+        case .other:
+            break
         }
     }
 
