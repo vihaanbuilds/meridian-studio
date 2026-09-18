@@ -13,8 +13,14 @@ public final class ProjectDocument: ObservableObject {
     public func addRegion(_ region: MIDIRegion, toTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         project.tracks[trackIndex].regions.append(region)
-        undoManager.registerUndo(withTarget: self) { @MainActor doc in
-            doc.removeRegion(id: region.id, fromTrackAt: trackIndex)
+        undoManager.registerUndo(withTarget: self) { doc in
+            // UndoManager's handler type predates Swift concurrency and isn't itself
+            // @MainActor, but registerUndo/undo/redo are only ever called from
+            // MainActor-isolated code in this app, so this is genuinely safe — the
+            // standard bridge for a legacy Foundation callback API like this one.
+            MainActor.assumeIsolated {
+                doc.removeRegion(id: region.id, fromTrackAt: trackIndex)
+            }
         }
     }
 
@@ -22,24 +28,30 @@ public final class ProjectDocument: ObservableObject {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let index = project.tracks[trackIndex].regions.firstIndex(where: { $0.id == id }) else { return }
         let removed = project.tracks[trackIndex].regions.remove(at: index)
-        undoManager.registerUndo(withTarget: self) { @MainActor doc in
-            doc.addRegion(removed, toTrackAt: trackIndex)
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.addRegion(removed, toTrackAt: trackIndex)
+            }
         }
     }
 
     public func addTrack(_ track: Track) {
         project.tracks.append(track)
         let insertedID = track.id
-        undoManager.registerUndo(withTarget: self) { @MainActor doc in
-            doc.removeTrack(id: insertedID)
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.removeTrack(id: insertedID)
+            }
         }
     }
 
     public func removeTrack(id: UUID) {
         guard let index = project.tracks.firstIndex(where: { $0.id == id }) else { return }
         let removed = project.tracks.remove(at: index)
-        undoManager.registerUndo(withTarget: self) { @MainActor doc in
-            doc.insertTrack(removed, at: index)
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.insertTrack(removed, at: index)
+            }
         }
     }
 
@@ -47,8 +59,10 @@ public final class ProjectDocument: ObservableObject {
         let clampedIndex = min(index, project.tracks.count)
         project.tracks.insert(track, at: clampedIndex)
         let insertedID = track.id
-        undoManager.registerUndo(withTarget: self) { @MainActor doc in
-            doc.removeTrack(id: insertedID)
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.removeTrack(id: insertedID)
+            }
         }
     }
 
