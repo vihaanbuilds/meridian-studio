@@ -23,6 +23,15 @@ register with, and unit tests exercise undo and redo directly — but it
 is not wired into the app's Edit menu or responder chain, so Cmd-Z does
 nothing in the running app. Surfacing it in the UI remains deferred.
 
+One hazard must be resolved before undo is ever wired up: the undo
+closures registered by `addRegion`/`removeRegion` capture a track
+*index*, and `removeTrack` (new in this branch) invalidates those indices
+by shifting every later track down one. An undo of a region change that
+straddles a track removal would therefore target the wrong track — or no
+track at all, silently, via the bounds guard. It is unreachable today
+only because no UI path can invoke undo; capturing the track `id` instead
+of its index is the fix.
+
 Multi-track support (Phase 2): `addTrack`/`removeTrack` are
 undo-registered structural operations, matching `addRegion`/
 `removeRegion`; `setTrackMuted`/`setTrackSolo` are direct field

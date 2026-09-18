@@ -62,6 +62,19 @@ sample-accurate `AVAudioTime` scheduling — acceptable for Phase 1's
 candidate refinement once the mixer/automation phases need tighter
 timing.
 
+### Phase 2 limitation: one shared sampler, one MIDI channel
+Every track plays through the *same* `AVAudioUnitSampler` instance on
+MIDI channel 0 — `PlaybackEngine.play(regions:tempo:)` flattens all
+audible regions into one stream of note on/off calls against that single
+node. Two consequences: (a) simultaneous same-pitch notes on different
+tracks interfere, because a note-off is addressed to a (pitch, channel)
+pair and not to the track that sounded it, so one track's note-off cuts
+short another track's still-sounding note at the same pitch; and (b)
+every track sounds identical — there is no per-track instrument or preset
+selection yet. The fix direction is one sampler (or at minimum one MIDI
+channel) per track, wired into its own mixer input, which also gives
+per-track volume and pan a place to live. Deferred.
+
 `PlaybackEngine` keeps a handle on every scheduled note `Task` so
 `stopAllNotes()` can cancel them and send note-off across all 128
 pitches; Stop and a re-press of Play both go through it, so a stopped
