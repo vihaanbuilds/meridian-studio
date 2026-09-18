@@ -17,6 +17,12 @@ separation described in the Phase 0 design spec
   unit-tested note-pairing logic), and `PlaybackEngine`/
   `PlaybackScheduler` (AVAudioEngine-based playback).
 
+Undo/redo is model-level scaffolding only in Phase 1: `ProjectDocument`
+owns an `UndoManager` that `addRegion`/`removeRegion` register with, and
+unit tests exercise undo and redo directly — but it is not wired into the
+app's Edit menu or responder chain, so Cmd-Z does nothing in the running
+app. Surfacing it in the UI is Phase 2 work.
+
 Real-time safety: the CoreMIDI read callback only parses bytes and
 pushes onto `MIDIEventQueue` (allocation-free after construction,
 guarded by `OSAllocatedUnfairLock`, drops events rather than blocking

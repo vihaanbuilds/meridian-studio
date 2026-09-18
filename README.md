@@ -19,18 +19,26 @@ for the full architecture and phase roadmap.
 
 ## Requirements
 
-- macOS with the Swift 6 toolchain (Xcode Command Line Tools are
-  enough — a full Xcode install is **not** required for Phase 1).
+- macOS with the Swift 6 toolchain.
 - A class-compliant MIDI keyboard/controller (optional — the app is
   usable without one, just without live input).
 
 ## Build, run, test
 
 ```sh
-swift build
-swift run MeridianStudioApp
-swift test
+swift build                   # Xcode Command Line Tools are enough
+swift run MeridianStudioApp   # Xcode Command Line Tools are enough
+swift test                    # requires a full Xcode install
 ```
+
+**Toolchain caveat:** `swift build` and `swift run` work with Xcode
+Command Line Tools alone, but `swift test` does **not** — SwiftPM's test
+target links `XCTest.framework`, which ships only with a full Xcode
+install, so with CLT alone the test files will not even compile. If you
+only have Command Line Tools, install Xcode to run the suite locally, or
+rely on CI (`.github/workflows/ci.yml`), which runs on a full-Xcode
+runner image. Most of this branch was in fact developed CLT-only, with
+test files verified by review rather than execution.
 
 ## Repository layout
 
@@ -46,6 +54,13 @@ evals/                 # Structured pass/fail evaluation suites
 
 ## Status
 
-Phase 1 in progress. See the design doc for the full 10-phase roadmap
-(audio recording, mixer, automation, then the AI foundation and
-AI-assisted arrangement/mixing layers).
+Phase 1 is code-complete: the app shell, MIDI recording/playback,
+timeline, piano roll, and save/open are all implemented and covered by
+unit and integration tests. The one remaining item is the manual smoke
+test with real MIDI hardware described in the Phase 1 implementation
+plan (`docs/superpowers/plans/2026-09-16-phase1-app-shell.md`), which
+needs a physical keyboard and cannot be automated.
+
+See the design doc for the full 10-phase roadmap (audio recording,
+mixer, automation, then the AI foundation and AI-assisted
+arrangement/mixing layers).
