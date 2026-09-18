@@ -85,7 +85,6 @@ struct PianoRollView: View {
                 }
             }
             .frame(width: width, height: pixelsPerSemitone)
-            .offset(x: CGFloat(note.startBeat) * pixelsPerBeat, y: yOffset(forPitch: note.pitch))
             .contentShape(Rectangle())
             .onTapGesture {
                 appState.selectNote(id: note.id)
@@ -97,10 +96,24 @@ struct PianoRollView: View {
                     .frame(width: resizeHandleWidth, height: pixelsPerSemitone)
                     .gesture(resizeGesture(for: note))
             }
+            // `.offset` must come LAST. It is layout-transparent: any modifier
+            // applied after it (overlay/background/border) is positioned against
+            // the note's ORIGINAL, un-offset frame, not the shifted one. With the
+            // offset applied earlier, the trailing resize handle rendered at the
+            // top-left of the piano roll instead of on the note. Applying the
+            // offset outermost puts the handle inside the shifted subtree, so it
+            // tracks the note — and it still needs no `.offset` of its own.
+            .offset(x: CGFloat(note.startBeat) * pixelsPerBeat, y: yOffset(forPitch: note.pitch))
     }
 
+    // Both drag gestures measure translation in `.global` rather than the default
+    // `.local` space. These gestures move the very view they are attached to, so a
+    // local origin would shift underneath the in-flight drag; a stable space keeps
+    // `translation` a true cursor delta, which is exactly what the beat/semitone
+    // math below wants. The piano roll is unscaled, so global and local pixels are
+    // the same size.
     private func moveGesture(for note: NoteEvent) -> some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 2, coordinateSpace: .global)
             .onChanged { value in
                 let start = dragStartNote ?? note
                 if dragStartNote == nil { dragStartNote = note }
@@ -118,7 +131,7 @@ struct PianoRollView: View {
     }
 
     private func resizeGesture(for note: NoteEvent) -> some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 2, coordinateSpace: .global)
             .onChanged { value in
                 let start = dragStartNote ?? note
                 if dragStartNote == nil { dragStartNote = note }
