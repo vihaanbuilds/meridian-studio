@@ -33,4 +33,41 @@ final class ProjectDocumentTests: XCTestCase {
         doc.setTempo(140)
         XCTAssertEqual(doc.project.tempo, 140)
     }
+
+    // Regression guards for the tempo clamp. A zero/negative/non-finite tempo makes
+    // `Tempo.seconds(forBeats:tempo:)` produce NaN or Infinity, which traps in
+    // `PlaybackEngine.play`'s `UInt64(seconds * 1e9)` conversion.
+
+    func testSetTempoFloorsNaNToPositiveMinimum() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.setTempo(Double.nan)
+        // Swift's `max` does not clamp NaN (all NaN comparisons are false), so this
+        // specifically guards the explicit `isFinite` branch.
+        XCTAssertEqual(doc.project.tempo, 1)
+        XCTAssertTrue(doc.project.tempo.isFinite)
+    }
+
+    func testSetTempoFloorsZeroToPositiveMinimum() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.setTempo(0)
+        XCTAssertEqual(doc.project.tempo, 1)
+    }
+
+    func testSetTempoFloorsNegativeToPositiveMinimum() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.setTempo(-5)
+        XCTAssertEqual(doc.project.tempo, 1)
+    }
+
+    func testSetTempoFloorsInfinityToPositiveMinimum() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.setTempo(.infinity)
+        XCTAssertEqual(doc.project.tempo, 1)
+    }
+
+    func testSetTempoLeavesNormalValueUnchanged() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.setTempo(93.5)
+        XCTAssertEqual(doc.project.tempo, 93.5)
+    }
 }
