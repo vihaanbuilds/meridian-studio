@@ -123,4 +123,66 @@ final class ProjectDocumentTests: XCTestCase {
         doc.setTrackSolo(true, forTrackAt: 0)
         XCTAssertTrue(doc.project.tracks[0].solo)
     }
+
+    func testUpdateNoteReplacesMatchingNote() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        var updated = note
+        updated.pitch = 64
+        doc.updateNote(updated, inTrackAt: 0)
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].pitch, 64)
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes.count, 1)
+    }
+
+    func testUpdateNoteIsNotUndoRegistered() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        var updated = note
+        updated.pitch = 64
+        doc.updateNote(updated, inTrackAt: 0)
+
+        XCTAssertFalse(doc.undoManager.canUndo)
+    }
+
+    func testDeleteNotesRemovesMatchingNotes() {
+        let noteA = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let noteB = NoteEvent(pitch: 64, velocity: 90, startBeat: 1, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [noteA, noteB])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.deleteNotes(ids: [noteA.id], inTrackAt: 0)
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes.count, 1)
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].id, noteB.id)
+    }
+
+    func testUndoRestoresDeletedNotes() {
+        let noteA = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let noteB = NoteEvent(pitch: 64, velocity: 90, startBeat: 1, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [noteA, noteB])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.deleteNotes(ids: [noteA.id], inTrackAt: 0)
+        doc.undoManager.undo()
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes.count, 2)
+        XCTAssertTrue(doc.project.tracks[0].regions[0].notes.contains(where: { $0.id == noteA.id }))
+    }
+
+    func testRedoRemovesNotesAgain() {
+        let noteA = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [noteA])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.deleteNotes(ids: [noteA.id], inTrackAt: 0)
+        doc.undoManager.undo()
+        doc.undoManager.redo()
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes.count, 0)
+    }
 }

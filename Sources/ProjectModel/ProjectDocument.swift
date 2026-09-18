@@ -66,6 +66,38 @@ public final class ProjectDocument: ObservableObject {
         }
     }
 
+    public func updateNote(_ note: NoteEvent, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
+        guard let noteIndex = project.tracks[trackIndex].regions[regionIndex].notes.firstIndex(where: { $0.id == note.id }) else { return }
+        project.tracks[trackIndex].regions[regionIndex].notes[noteIndex] = note
+    }
+
+    public func deleteNotes(ids: Set<UUID>, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
+        let removedNotes = project.tracks[trackIndex].regions[regionIndex].notes.filter { ids.contains($0.id) }
+        guard !removedNotes.isEmpty else { return }
+        project.tracks[trackIndex].regions[regionIndex].notes.removeAll { ids.contains($0.id) }
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.restoreNotes(removedNotes, inTrackAt: trackIndex)
+            }
+        }
+    }
+
+    private func restoreNotes(_ notes: [NoteEvent], inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
+        project.tracks[trackIndex].regions[regionIndex].notes.append(contentsOf: notes)
+        let ids = Set(notes.map(\.id))
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.deleteNotes(ids: ids, inTrackAt: trackIndex)
+            }
+        }
+    }
+
     public func setTempo(_ tempo: Double) {
         // Clamp to a small positive floor: `Tempo.seconds(forBeats:tempo:)` divides by
         // tempo, so a zero or non-finite value here produces NaN/Infinity downstream
