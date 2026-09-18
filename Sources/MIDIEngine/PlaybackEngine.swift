@@ -35,6 +35,7 @@ public final class PlaybackEngine {
             let task = Task { @MainActor [sampler] in
                 do {
                     try await Task.sleep(nanoseconds: UInt64(max(scheduled.startSeconds, 0) * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
                     sampler.startNote(scheduled.pitch, withVelocity: scheduled.velocity, onChannel: 0)
                     try await Task.sleep(nanoseconds: UInt64(max(scheduled.lengthSeconds, 0) * 1_000_000_000))
                 } catch {
