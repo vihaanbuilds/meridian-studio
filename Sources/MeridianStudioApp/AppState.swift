@@ -16,6 +16,12 @@ final class AppState: ObservableObject {
     /// range whenever tracks are added or removed, and reset to 0 by
     /// `bindDocument()` whenever `document` is replaced wholesale.
     @Published var selectedTrackIndex: Int = 0
+    /// The single selected note in the piano roll, if any. Not reset when the
+    /// selected track changes or a document is swapped — `PianoRollView` only ever
+    /// shows the current track's notes, so a stale id simply matches nothing,
+    /// which is visually equivalent to no selection without duplicating the reset
+    /// logic `bindDocument()` already owns for `selectedTrackIndex`.
+    @Published var selectedNoteID: UUID?
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately
@@ -231,5 +237,20 @@ final class AppState: ObservableObject {
     func toggleSolo(at index: Int) {
         guard document.project.tracks.indices.contains(index) else { return }
         document.setTrackSolo(!document.project.tracks[index].solo, forTrackAt: index)
+    }
+
+    func selectNote(id: UUID?) {
+        selectedNoteID = id
+    }
+
+    func moveOrResizeSelectedNote(to updated: NoteEvent) {
+        guard selectedNoteID == updated.id else { return }
+        document.updateNote(updated, inTrackAt: selectedTrackIndex)
+    }
+
+    func deleteSelectedNote() {
+        guard let selectedNoteID else { return }
+        document.deleteNotes(ids: [selectedNoteID], inTrackAt: selectedTrackIndex)
+        self.selectedNoteID = nil
     }
 }
