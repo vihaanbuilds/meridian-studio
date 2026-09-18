@@ -13,7 +13,7 @@ public final class ProjectDocument: ObservableObject {
     public func addRegion(_ region: MIDIRegion, toTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         project.tracks[trackIndex].regions.append(region)
-        undoManager.registerUndo(withTarget: self) { doc in
+        undoManager.registerUndo(withTarget: self) { @MainActor doc in
             doc.removeRegion(id: region.id, fromTrackAt: trackIndex)
         }
     }
@@ -22,7 +22,7 @@ public final class ProjectDocument: ObservableObject {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let index = project.tracks[trackIndex].regions.firstIndex(where: { $0.id == id }) else { return }
         let removed = project.tracks[trackIndex].regions.remove(at: index)
-        undoManager.registerUndo(withTarget: self) { doc in
+        undoManager.registerUndo(withTarget: self) { @MainActor doc in
             doc.addRegion(removed, toTrackAt: trackIndex)
         }
     }
@@ -30,7 +30,7 @@ public final class ProjectDocument: ObservableObject {
     public func addTrack(_ track: Track) {
         project.tracks.append(track)
         let insertedID = track.id
-        undoManager.registerUndo(withTarget: self) { doc in
+        undoManager.registerUndo(withTarget: self) { @MainActor doc in
             doc.removeTrack(id: insertedID)
         }
     }
@@ -38,7 +38,7 @@ public final class ProjectDocument: ObservableObject {
     public func removeTrack(id: UUID) {
         guard let index = project.tracks.firstIndex(where: { $0.id == id }) else { return }
         let removed = project.tracks.remove(at: index)
-        undoManager.registerUndo(withTarget: self) { doc in
+        undoManager.registerUndo(withTarget: self) { @MainActor doc in
             doc.insertTrack(removed, at: index)
         }
     }
@@ -47,7 +47,7 @@ public final class ProjectDocument: ObservableObject {
         let clampedIndex = min(index, project.tracks.count)
         project.tracks.insert(track, at: clampedIndex)
         let insertedID = track.id
-        undoManager.registerUndo(withTarget: self) { doc in
+        undoManager.registerUndo(withTarget: self) { @MainActor doc in
             doc.removeTrack(id: insertedID)
         }
     }
