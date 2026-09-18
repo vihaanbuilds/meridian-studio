@@ -14,7 +14,10 @@ struct TransportView: View {
     var body: some View {
         HStack(spacing: 16) {
             Button(action: { appState.play() }) {
+                // Tinted while a play-through is in flight. Pressing Play again
+                // restarts from the top (PlaybackEngine cancels the previous run).
                 Image(systemName: "play.fill")
+                    .foregroundColor(appState.isPlaying ? .accentColor : .primary)
             }
             Button(action: { appState.stopPlayback() }) {
                 Image(systemName: "stop.fill")

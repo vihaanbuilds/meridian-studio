@@ -28,6 +28,7 @@ final class AppState: ObservableObject {
     /// app lifetime: if it only ran while recording, the queue would silently fill
     /// and drop events, and live input would be invisible outside a take.
     private var pollTimer: Timer?
+    private var playbackCompletionTask: Task<Void, Never>?
     private var documentCancellable: AnyCancellable?
 
     private static let queuePollInterval: TimeInterval = 0.01
@@ -81,11 +82,11 @@ final class AppState: ObservableObject {
 
     private func startRecording() {
         // Clear anything already queued from before the take started: those messages
-        // would otherwise be timestamped against the new recording clock and folded
-        // into this take at the wrong beat positions. `isRecording` is still false
-        // here, so this drain feeds nothing to the recorder — it only keeps the
-        // live-note highlight in sync, which a bare `queue.drain()` discard would
-        // desync by swallowing a note-off.
+        // would otherwise be timestamped against the new clock and folded into this
+        // take at the wrong beat positions. `isRecording` is still false here, so
+        // this drain feeds nothing to the recorder — it only keeps the live-note
+        // highlight in sync, which a bare `queue.drain()` discard would desync by
+        // swallowing a note-off.
         drainMIDIQueue()
         recordingClock.tempo = document.project.tempo
         recorder.reset()
@@ -139,11 +140,31 @@ final class AppState: ObservableObject {
 
     func play() {
         guard let region = document.project.tracks.first?.regions.last else { return }
+        let tempo = document.project.tempo
+        playbackCompletionTask?.cancel()
         isPlaying = true
-        playbackEngine.play(region: region, tempo: document.project.tempo)
+        playbackEngine.play(region: region, tempo: tempo)
+
+        // `PlaybackEngine` has no completion callback, so mirror the run length here
+        // to clear `isPlaying` when a play-through ends on its own.
+        let endBeat = max(region.notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0, region.lengthBeats)
+        let durationSeconds = Tempo.seconds(forBeats: max(endBeat, 0), tempo: tempo)
+        playbackCompletionTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(max(durationSeconds, 0) * 1_000_000_000))
+            } catch {
+                return  // Superseded by another play() or by stopPlayback().
+            }
+            self?.isPlaying = false
+        }
     }
 
     func stopPlayback() {
+        playbackCompletionTask?.cancel()
+        playbackCompletionTask = nil
+        // Cancels the in-flight scheduled note tasks and silences the sampler —
+        // without this, Stop only flipped a flag while notes kept firing.
+        playbackEngine.stopAllNotes()
         isPlaying = false
     }
 }
