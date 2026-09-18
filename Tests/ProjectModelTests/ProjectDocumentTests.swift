@@ -70,4 +70,57 @@ final class ProjectDocumentTests: XCTestCase {
         doc.setTempo(93.5)
         XCTAssertEqual(doc.project.tempo, 93.5)
     }
+
+    func testAddTrackAppendsTrack() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.addTrack(Track(name: "Bass"))
+        XCTAssertEqual(doc.project.tracks.count, 2)
+        XCTAssertEqual(doc.project.tracks[1].name, "Bass")
+    }
+
+    func testUndoRemovesAddedTrack() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.addTrack(Track(name: "Bass"))
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks.count, 1)
+        XCTAssertEqual(doc.project.tracks[0].name, "Piano")
+    }
+
+    func testRedoReAddsTrack() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.addTrack(Track(name: "Bass"))
+        doc.undoManager.undo()
+        doc.undoManager.redo()
+        XCTAssertEqual(doc.project.tracks.count, 2)
+        XCTAssertEqual(doc.project.tracks[1].name, "Bass")
+    }
+
+    func testRemoveTrackRemovesByID() {
+        let bass = Track(name: "Bass")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano"), bass]))
+        doc.removeTrack(id: bass.id)
+        XCTAssertEqual(doc.project.tracks.count, 1)
+        XCTAssertEqual(doc.project.tracks[0].name, "Piano")
+    }
+
+    func testUndoReInsertsRemovedTrackAtOriginalIndex() {
+        let bass = Track(name: "Bass")
+        let drums = Track(name: "Drums")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano"), bass, drums]))
+        doc.removeTrack(id: bass.id)
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks.map(\.name), ["Piano", "Bass", "Drums"])
+    }
+
+    func testSetTrackMutedUpdatesTrack() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.setTrackMuted(true, forTrackAt: 0)
+        XCTAssertTrue(doc.project.tracks[0].muted)
+    }
+
+    func testSetTrackSoloUpdatesTrack() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        doc.setTrackSolo(true, forTrackAt: 0)
+        XCTAssertTrue(doc.project.tracks[0].solo)
+    }
 }

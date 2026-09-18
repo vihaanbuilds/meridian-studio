@@ -27,6 +27,31 @@ public final class ProjectDocument: ObservableObject {
         }
     }
 
+    public func addTrack(_ track: Track) {
+        project.tracks.append(track)
+        let insertedID = track.id
+        undoManager.registerUndo(withTarget: self) { doc in
+            doc.removeTrack(id: insertedID)
+        }
+    }
+
+    public func removeTrack(id: UUID) {
+        guard let index = project.tracks.firstIndex(where: { $0.id == id }) else { return }
+        let removed = project.tracks.remove(at: index)
+        undoManager.registerUndo(withTarget: self) { doc in
+            doc.insertTrack(removed, at: index)
+        }
+    }
+
+    private func insertTrack(_ track: Track, at index: Int) {
+        let clampedIndex = min(index, project.tracks.count)
+        project.tracks.insert(track, at: clampedIndex)
+        let insertedID = track.id
+        undoManager.registerUndo(withTarget: self) { doc in
+            doc.removeTrack(id: insertedID)
+        }
+    }
+
     public func setTempo(_ tempo: Double) {
         // Clamp to a small positive floor: `Tempo.seconds(forBeats:tempo:)` divides by
         // tempo, so a zero or non-finite value here produces NaN/Infinity downstream
@@ -35,6 +60,16 @@ public final class ProjectDocument: ObservableObject {
         // `max` does NOT clamp NaN (max(.nan, 1) == .nan, since NaN comparisons are
         // always false), so NaN needs its own explicit check here.
         project.tempo = tempo.isFinite ? max(tempo, 1) : 1
+    }
+
+    public func setTrackMuted(_ muted: Bool, forTrackAt index: Int) {
+        guard project.tracks.indices.contains(index) else { return }
+        project.tracks[index].muted = muted
+    }
+
+    public func setTrackSolo(_ solo: Bool, forTrackAt index: Int) {
+        guard project.tracks.indices.contains(index) else { return }
+        project.tracks[index].solo = solo
     }
 
     public func replaceProject(_ newProject: Project) {
