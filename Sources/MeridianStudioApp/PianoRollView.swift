@@ -11,7 +11,8 @@ struct PianoRollView: View {
     private let liveIndicatorWidth: CGFloat = 24
 
     private var notes: [NoteEvent] {
-        appState.document.project.tracks.first?.regions.last?.notes ?? []
+        guard appState.document.project.tracks.indices.contains(appState.selectedTrackIndex) else { return [] }
+        return appState.document.project.tracks[appState.selectedTrackIndex].regions.last?.notes ?? []
     }
 
     /// Pitches currently held on the MIDI keyboard, sorted so the view has a stable
