@@ -21,14 +21,16 @@ running status or SysEx — a documented Phase 1 limitation.
   in the read callback, but nothing downstream uses it for note timing:
   `MIDIRecorder` stamps each note from `NoteRecorderClock`, which reads
   the wall clock at the moment `AppState` drains the queue. That drain
-  runs on a repeating 0.01 s `Timer`, so recorded note positions carry
-  roughly **±10 ms of quantization error plus run-loop scheduling
-  jitter** (a `Timer` on a busy main run loop can fire noticeably late;
-  under heavy UI work the real tolerance is worse than 10 ms). That is
-  the honest Phase 1 tolerance — fine for the "recorded notes land
-  roughly where you played them" bar, not good enough for tight
-  quantized work. Using the captured hardware timestamp is the fix, and
-  is deferred.
+  runs on a repeating 0.01 s `Timer`, so every recorded note is stamped
+  **0–10 ms late** (one-sided: quantized up to the next drain tick,
+  never early) **plus run-loop scheduling jitter** — a `Timer` on a busy
+  main run loop can fire well after its deadline, so under heavy UI work
+  the real error exceeds 10 ms. That is the honest Phase 1 tolerance:
+  fine for the "recorded notes land roughly where you played them" bar,
+  not good enough for tight quantized work. Note that the error is
+  mostly a constant offset, so *relative* timing between notes in one
+  take is better than the absolute figure suggests. Using the captured
+  hardware timestamp is the fix, and is deferred.
 
 ## Recording
 `MIDIMessageParser.parse(_:)` turns a `RawMIDIMessage` into a
