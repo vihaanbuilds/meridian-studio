@@ -13,7 +13,8 @@ final class AppState: ObservableObject {
     @Published var isRecording = false
     @Published var fileURL: URL?
     /// The track armed for recording and shown in the piano roll. Clamped into
-    /// range whenever tracks are added or removed.
+    /// range whenever tracks are added or removed, and reset to 0 by
+    /// `bindDocument()` whenever `document` is replaced wholesale.
     @Published var selectedTrackIndex: Int = 0
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
@@ -60,6 +61,16 @@ final class AppState: ObservableObject {
 
     private func bindDocument() {
         recordingClock.tempo = document.project.tempo
+        // Every document swap (`newProject()`, `openProject()`) lands here via
+        // `document`'s `didSet`. The selection must reset, not carry over: a stale
+        // index past the new project's track count leaves `PianoRollView` blank
+        // (its bounds guard returns `[]`) and makes `addRegion` silently drop a
+        // recorded take (its bounds guard returns without adding, with no error
+        // surfaced). 0 is the only index valid for every project the app can
+        // produce, since `newProject()` and `removeTrack(at:)` both keep at least
+        // one track; the existing bounds guards still cover a hand-authored
+        // zero-track file loaded from disk.
+        selectedTrackIndex = 0
         documentCancellable = document.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
@@ -177,6 +188,10 @@ final class AppState: ObservableObject {
     }
 
     func selectTrack(at index: Int) {
+        // `stopRecording()` reads `selectedTrackIndex` at Stop time, not at Start,
+        // so letting the selection move mid-take would file the finished take on
+        // whichever track happened to be selected when Stop was pressed.
+        guard !isRecording else { return }
         guard document.project.tracks.indices.contains(index) else { return }
         selectedTrackIndex = index
     }
@@ -192,6 +207,14 @@ final class AppState: ObservableObject {
         guard document.project.tracks.count > 1 else { return }
         let id = document.project.tracks[index].id
         document.removeTrack(id: id)
+        // Removing a track *before* the selected one shifts it down by one; without
+        // this the selection would silently jump to whatever track slid into the
+        // index. Deliberately `<` and not `<=`: when the selected track is itself
+        // removed, the clamp below is what moves the selection, landing on whatever
+        // now occupies that index (or the new last track, if it was at the end).
+        if index < selectedTrackIndex {
+            selectedTrackIndex -= 1
+        }
         selectedTrackIndex = min(selectedTrackIndex, document.project.tracks.count - 1)
     }
 
