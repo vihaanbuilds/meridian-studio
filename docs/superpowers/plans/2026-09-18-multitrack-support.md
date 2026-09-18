@@ -612,7 +612,7 @@ struct TimelineView: View {
                                 }
                         }
                     }
-                    .frame(minWidth: 800, height: laneHeight, alignment: .topLeading)
+                    .frame(minWidth: 800, minHeight: laneHeight, alignment: .topLeading)
                     Divider()
                 }
             }
