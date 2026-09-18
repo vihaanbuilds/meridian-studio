@@ -12,6 +12,9 @@ final class AppState: ObservableObject {
     @Published var isPlaying = false
     @Published var isRecording = false
     @Published var fileURL: URL?
+    /// The track armed for recording and shown in the piano roll. Clamped into
+    /// range whenever tracks are added or removed.
+    @Published var selectedTrackIndex: Int = 0
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately
@@ -112,7 +115,7 @@ final class AppState: ObservableObject {
         guard !recorder.recordedNotes.isEmpty else { return }
         let regionLength = ceil(recorder.recordedNotes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0)
         let region = MIDIRegion(startBeat: 0, lengthBeats: max(regionLength, 1), notes: recorder.recordedNotes)
-        document.addRegion(region, toTrackAt: 0)
+        document.addRegion(region, toTrackAt: selectedTrackIndex)
     }
 
     private func drainMIDIQueue() {
@@ -139,15 +142,20 @@ final class AppState: ObservableObject {
     }
 
     func play() {
-        guard let region = document.project.tracks.first?.regions.last else { return }
+        let audibleTracks = TrackAudibility.audibleTracks(in: document.project.tracks)
+        let regions = audibleTracks.compactMap(\.regions.last)
+        guard !regions.isEmpty else { return }
         let tempo = document.project.tempo
         playbackCompletionTask?.cancel()
         isPlaying = true
-        playbackEngine.play(region: region, tempo: tempo)
+        playbackEngine.play(regions: regions, tempo: tempo)
 
         // `PlaybackEngine` has no completion callback, so mirror the run length here
-        // to clear `isPlaying` when a play-through ends on its own.
-        let endBeat = max(region.notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0, region.lengthBeats)
+        // to clear `isPlaying` when a play-through ends on its own. Duration is the
+        // longest of every region being played, not just one.
+        let endBeat = regions.map { region in
+            max(region.notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0, region.lengthBeats)
+        }.max() ?? 0
         let durationSeconds = Tempo.seconds(forBeats: max(endBeat, 0), tempo: tempo)
         playbackCompletionTask = Task { @MainActor [weak self] in
             do {
@@ -166,5 +174,34 @@ final class AppState: ObservableObject {
         // without this, Stop only flipped a flag while notes kept firing.
         playbackEngine.stopAllNotes()
         isPlaying = false
+    }
+
+    func selectTrack(at index: Int) {
+        guard document.project.tracks.indices.contains(index) else { return }
+        selectedTrackIndex = index
+    }
+
+    func addTrack() {
+        let name = "Track \(document.project.tracks.count + 1)"
+        document.addTrack(Track(name: name))
+        selectedTrackIndex = document.project.tracks.count - 1
+    }
+
+    func removeTrack(at index: Int) {
+        guard document.project.tracks.indices.contains(index) else { return }
+        guard document.project.tracks.count > 1 else { return }
+        let id = document.project.tracks[index].id
+        document.removeTrack(id: id)
+        selectedTrackIndex = min(selectedTrackIndex, document.project.tracks.count - 1)
+    }
+
+    func toggleMute(at index: Int) {
+        guard document.project.tracks.indices.contains(index) else { return }
+        document.setTrackMuted(!document.project.tracks[index].muted, forTrackAt: index)
+    }
+
+    func toggleSolo(at index: Int) {
+        guard document.project.tracks.indices.contains(index) else { return }
+        document.setTrackSolo(!document.project.tracks[index].solo, forTrackAt: index)
     }
 }
