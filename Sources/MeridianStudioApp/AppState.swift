@@ -52,6 +52,10 @@ final class AppState: ObservableObject {
     }
 
     private func startRecording() {
+        // Discard anything already queued from before the take started: those
+        // messages would otherwise be timestamped against the new recording clock
+        // and folded into this take at the wrong beat positions.
+        _ = midiInput.queue.drain()
         recordingClock.tempo = document.project.tempo
         recorder.reset()
         recordingClock.startDate = Date()
@@ -65,8 +69,15 @@ final class AppState: ObservableObject {
         isRecording = false
         pollTimer?.invalidate()
         pollTimer = nil
-        recordingClock.startDate = nil
+        // Drain *before* clearing `startDate`: `RecordingClock.beatsElapsed()`
+        // returns 0 once `startDate` is nil, so any note-off still sitting in the
+        // queue would otherwise be timestamped at beat 0 instead of the real stop
+        // time, producing a bogus zero-or-negative-length note.
         drainMIDIQueue()
+        let finalBeat = recordingClock.beatsElapsed()
+        // Keys still held at Stop have no note-off; close them out at the stop beat.
+        recorder.finalize(atBeat: finalBeat)
+        recordingClock.startDate = nil
 
         guard !recorder.recordedNotes.isEmpty else { return }
         let regionLength = ceil(recorder.recordedNotes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0)
