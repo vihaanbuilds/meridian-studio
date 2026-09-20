@@ -1,7 +1,7 @@
-// Tests/MIDIEngineTests/MIDIRecorderTests.swift
+// Tests/AudioEngineTests/MIDIRecorderTests.swift
 import XCTest
 import ProjectModel
-@testable import MIDIEngine
+@testable import AudioEngine
 
 @MainActor
 final class MIDIRecorderTests: XCTestCase {

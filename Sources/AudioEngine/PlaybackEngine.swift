@@ -1,4 +1,4 @@
-// Sources/MIDIEngine/PlaybackEngine.swift
+// Sources/AudioEngine/PlaybackEngine.swift
 import AVFoundation
 import ProjectModel
 

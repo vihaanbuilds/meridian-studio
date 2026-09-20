@@ -6,12 +6,14 @@ separation described in the Phase 0 design spec
 
 - **UI** (`Sources/MeridianStudioApp`) — SwiftUI views: transport,
   track list, timeline, piano roll. Depends on `ProjectModel` and
-  `MIDIEngine`, never the other way around.
+  `AudioEngine`, never the other way around.
 - **Project Model** (`Sources/ProjectModel`) — `Project`, `Track`,
   `MIDIRegion`, `NoteEvent` value types (Codable, UI-independent),
   `ProjectStore` (versioned JSON persistence), and `ProjectDocument`
   (an `UndoManager`-backed observable wrapper). No SwiftUI import.
-- **MIDI Engine** (`Sources/MIDIEngine`) — `CoreMIDIInput` (hardware
+- **Audio Engine** (`Sources/AudioEngine`, renamed from `MIDIEngine`
+  once it grew a non-MIDI real-time I/O path — see the audio recording
+  section below) — `CoreMIDIInput` (hardware
   adapter), `MIDIEventQueue` (thread-safe handoff off the CoreMIDI
   callback thread), `MIDIMessageParser`/`MIDIRecorder` (pure,
   unit-tested note-pairing logic), and `PlaybackEngine`/

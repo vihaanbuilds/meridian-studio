@@ -1,7 +1,7 @@
-// Tests/MIDIEngineTests/RecordAndPersistIntegrationTests.swift
+// Tests/AudioEngineTests/RecordAndPersistIntegrationTests.swift
 import XCTest
 import ProjectModel
-@testable import MIDIEngine
+@testable import AudioEngine
 
 @MainActor
 final class RecordAndPersistIntegrationTests: XCTestCase {

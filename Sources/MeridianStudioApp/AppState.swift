@@ -2,7 +2,7 @@
 import Combine
 import Foundation
 import ProjectModel
-import MIDIEngine
+import AudioEngine
 
 @MainActor
 final class AppState: ObservableObject {

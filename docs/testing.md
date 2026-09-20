@@ -3,7 +3,8 @@
 - `Tests/ProjectModelTests` — Codable round-trips, `Tempo` beat/second
   math, `ProjectStore` save/load and schema-version rejection,
   `ProjectDocument` undo/redo.
-- `Tests/MIDIEngineTests` — `MIDIEventQueue` ordering/overflow,
+- `Tests/AudioEngineTests` (renamed from `MIDIEngineTests`) —
+  `MIDIEventQueue` ordering/overflow,
   `MIDIMessageParser` byte parsing, `MIDIRecorder` note pairing,
   `PlaybackScheduler` beat-to-second math, and an integration test
   (`RecordAndPersistIntegrationTests`) that drives synthetic MIDI

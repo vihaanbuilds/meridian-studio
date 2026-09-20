@@ -1,5 +1,5 @@
 import XCTest
-@testable import MIDIEngine
+@testable import AudioEngine
 
 final class MIDIEventQueueTests: XCTestCase {
     func testPushAndDrainPreservesOrder() {

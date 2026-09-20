@@ -1,4 +1,4 @@
-// Sources/MIDIEngine/CoreMIDIInput.swift
+// Sources/AudioEngine/CoreMIDIInput.swift
 import CoreMIDI
 import Darwin
 
