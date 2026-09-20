@@ -65,4 +65,20 @@ final class QuantizerTests: XCTestCase {
         XCTAssertEqual(overOne[0].startBeat, 0.25, accuracy: 0.0001)   // same as strength 1
         XCTAssertEqual(underZero[0].startBeat, 0.3, accuracy: 0.0001) // same as strength 0
     }
+
+    func testNonFiniteStrengthDoesNotProduceNonFiniteStartBeat() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.3, lengthBeats: 1)
+        let nanResult = Quantizer.quantize([note], gridBeats: 0.25, strength: .nan)
+        let infResult = Quantizer.quantize([note], gridBeats: 0.25, strength: .infinity)
+
+        XCTAssertTrue(nanResult[0].startBeat.isFinite)
+        XCTAssertTrue(infResult[0].startBeat.isFinite)
+        // Both non-finite strengths take the `isFinite` guard's no-change path, so both
+        // leave startBeat at 0.3. Without that guard: NaN survives `min`/`max` (all NaN
+        // comparisons are false) and poisons startBeat into NaN, while `.infinity` clamps
+        // to 1 and hard-snaps to 0.25 — so both concrete assertions below fail if the
+        // guard is removed.
+        XCTAssertEqual(nanResult[0].startBeat, 0.3, accuracy: 0.0001)
+        XCTAssertEqual(infResult[0].startBeat, 0.3, accuracy: 0.0001)
+    }
 }
