@@ -22,6 +22,12 @@ final class AppState: ObservableObject {
     /// which is visually equivalent to no selection without duplicating the reset
     /// logic `bindDocument()` already owns for `selectedTrackIndex`.
     @Published var selectedNoteID: UUID?
+    /// Grid spacing in beats for `applyQuantization()` — 0.25 (a sixteenth-note
+    /// grid) by default.
+    @Published var quantizeGridBeats: Double = 0.25
+    /// 0...1, how strongly `applyQuantization()` snaps notes toward the grid —
+    /// 1.0 (a hard snap) by default.
+    @Published var quantizeStrength: Double = 1.0
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately
@@ -252,5 +258,9 @@ final class AppState: ObservableObject {
         guard let selectedNoteID else { return }
         document.deleteNotes(ids: [selectedNoteID], inTrackAt: selectedTrackIndex)
         self.selectedNoteID = nil
+    }
+
+    func applyQuantization() {
+        document.quantizeNotes(gridBeats: quantizeGridBeats, strength: quantizeStrength, inTrackAt: selectedTrackIndex)
     }
 }
