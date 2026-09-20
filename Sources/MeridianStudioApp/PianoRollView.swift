@@ -30,8 +30,12 @@ struct PianoRollView: View {
         CGFloat(Int(highestPitch) - Int(pitch)) * pixelsPerSemitone
     }
 
+    // Clamp to the pitches the canvas actually renders, not the full MIDI range:
+    // a note dragged outside 36...96 is invisible, unreachable by scrolling (the
+    // scrollable content size is fixed) and unrecoverable, since `updateNote`
+    // isn't undo-registered.
     private func clampPitch(_ pitch: Int) -> UInt8 {
-        UInt8(min(max(pitch, 0), 127))
+        UInt8(min(max(pitch, Int(lowestPitch)), Int(highestPitch)))
     }
 
     var body: some View {
@@ -120,7 +124,12 @@ struct PianoRollView: View {
                 let deltaBeats = Double(value.translation.width / pixelsPerBeat)
                 let deltaPitch = -Int((value.translation.height / pixelsPerSemitone).rounded())
                 var updated = start
-                updated.startBeat = max(start.startBeat + deltaBeats, 0)
+                // Keep the note's right edge within the canvas (800pt / pixelsPerBeat
+                // = 20 beats) — past that it becomes invisible, unreachable by
+                // scrolling (the scrollable content size is fixed), and unrecoverable
+                // since updateNote isn't undo-registered.
+                let maxStartBeat = max(800 / Double(pixelsPerBeat) - start.lengthBeats, 0)
+                updated.startBeat = min(max(start.startBeat + deltaBeats, 0), maxStartBeat)
                 updated.pitch = clampPitch(Int(start.pitch) + deltaPitch)
                 appState.selectNote(id: note.id)
                 appState.moveOrResizeSelectedNote(to: updated)
