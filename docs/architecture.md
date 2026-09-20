@@ -58,6 +58,17 @@ turns drag gestures into `updateNote` calls (move changes
 `startBeat`/`pitch`, resize changes only `lengthBeats`) and `Delete`/
 `Backspace` into a `deleteNotes` call.
 
+Quantization (Phase 2, the last piece of "Full MIDI editing"):
+`Quantizer.quantize(_:gridBeats:strength:)` is pure logic in
+`ProjectModel` — for each note, it moves `startBeat` toward the nearest
+grid line by `strength` (0...1, clamped; 0 = no change, 1 = a hard
+snap), leaving every other field untouched.
+`ProjectDocument.quantizeNotes` applies it to a track's current region
+and, like `updateNote`, is a field edit with no undo registration — a
+batch position edit is conceptually many field edits, not a removal.
+It operates on the whole region rather than a selection, since
+multi-select doesn't exist yet.
+
 Real-time safety: the CoreMIDI read callback only parses bytes and
 pushes onto `MIDIEventQueue` (allocation-free after construction,
 guarded by `OSAllocatedUnfairLock`, drops events rather than blocking
