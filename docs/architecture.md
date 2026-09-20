@@ -45,6 +45,19 @@ armed for recording and shown in the piano roll — playback plays every
 audible track's most recent region simultaneously, not just the
 selected one.
 
+Note-level editing (Phase 2): `NoteEvent` carries a stable `id` (added
+after Phase 1 shipped, with a custom decoder that synthesizes one for
+project files saved before this field existed, and an `==` that
+ignores `id` so every pre-existing content-based test kept working
+unmodified). `ProjectDocument.updateNote` is a field edit (no undo,
+matching `setTempo`); `deleteNotes` is a structural removal
+(undo-registered, matching `removeRegion`/`removeTrack` — including the
+same `MainActor.assumeIsolated` bridge in its undo closure).
+`AppState.selectedNoteID` tracks a single selected note; the piano roll
+turns drag gestures into `updateNote` calls (move changes
+`startBeat`/`pitch`, resize changes only `lengthBeats`) and `Delete`/
+`Backspace` into a `deleteNotes` call.
+
 Real-time safety: the CoreMIDI read callback only parses bytes and
 pushes onto `MIDIEventQueue` (allocation-free after construction,
 guarded by `OSAllocatedUnfairLock`, drops events rather than blocking
