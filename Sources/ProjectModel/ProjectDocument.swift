@@ -98,6 +98,13 @@ public final class ProjectDocument: ObservableObject {
         }
     }
 
+    public func quantizeNotes(gridBeats: Double, strength: Double, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
+        let notes = project.tracks[trackIndex].regions[regionIndex].notes
+        project.tracks[trackIndex].regions[regionIndex].notes = Quantizer.quantize(notes, gridBeats: gridBeats, strength: strength)
+    }
+
     public func setTempo(_ tempo: Double) {
         // Clamp to a small positive floor: `Tempo.seconds(forBeats:tempo:)` divides by
         // tempo, so a zero or non-finite value here produces NaN/Infinity downstream

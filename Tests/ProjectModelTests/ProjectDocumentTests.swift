@@ -185,4 +185,41 @@ final class ProjectDocumentTests: XCTestCase {
 
         XCTAssertEqual(doc.project.tracks[0].regions[0].notes.count, 0)
     }
+
+    func testQuantizeNotesAppliesQuantizerToCurrentRegion() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.3, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.quantizeNotes(gridBeats: 0.25, strength: 1, inTrackAt: 0)
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].startBeat, 0.25, accuracy: 0.0001)
+    }
+
+    func testQuantizeNotesIsNotUndoRegistered() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.3, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.quantizeNotes(gridBeats: 0.25, strength: 1, inTrackAt: 0)
+
+        XCTAssertFalse(doc.undoManager.canUndo)
+    }
+
+    func testQuantizeNotesNoOpsForOutOfRangeTrackIndex() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.3, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.quantizeNotes(gridBeats: 0.25, strength: 1, inTrackAt: 5)
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].startBeat, 0.3, accuracy: 0.0001)
+    }
+
+    func testQuantizeNotesNoOpsForTrackWithNoRegions() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
+        // Should not crash.
+        doc.quantizeNotes(gridBeats: 0.25, strength: 1, inTrackAt: 0)
+        XCTAssertTrue(doc.project.tracks[0].regions.isEmpty)
+    }
 }
