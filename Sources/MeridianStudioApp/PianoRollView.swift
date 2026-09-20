@@ -5,6 +5,11 @@ import ProjectModel
 struct PianoRollView: View {
     @EnvironmentObject var appState: AppState
     @State private var dragStartNote: NoteEvent?
+    // TrackListView is a `List` (NSTableView-backed), which takes first responder
+    // when clicked. In the natural workflow — click a track, click a note, press
+    // Delete — nothing here would otherwise claim keyboard focus, so
+    // `.onDeleteCommand` may never fire. Tapping a note moves focus to the roll.
+    @FocusState private var isFocused: Bool
 
     private let pixelsPerBeat: CGFloat = 40
     private let pixelsPerSemitone: CGFloat = 6
@@ -72,6 +77,8 @@ struct PianoRollView: View {
             )
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .focusable()
+        .focused($isFocused)
         .onDeleteCommand {
             appState.deleteSelectedNote()
         }
@@ -92,6 +99,7 @@ struct PianoRollView: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 appState.selectNote(id: note.id)
+                isFocused = true
             }
             .gesture(moveGesture(for: note))
             .overlay(alignment: .trailing) {
