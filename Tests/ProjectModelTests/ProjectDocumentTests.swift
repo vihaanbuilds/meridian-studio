@@ -196,6 +196,21 @@ final class ProjectDocumentTests: XCTestCase {
         XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].startBeat, 0.25, accuracy: 0.0001)
     }
 
+    func testQuantizeNotesOnlyAffectsCurrentRegionNotEarlierOnes() {
+        // Two regions, so this can distinguish `regions.last` (the current take, which
+        // the piano roll shows) from `regions.first`.
+        let earlierNote = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.3, lengthBeats: 1)
+        let earlierRegion = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [earlierNote])
+        let currentNote = NoteEvent(pitch: 64, velocity: 90, startBeat: 0.3, lengthBeats: 1)
+        let currentRegion = MIDIRegion(startBeat: 4, lengthBeats: 4, notes: [currentNote])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [earlierRegion, currentRegion])]))
+
+        doc.quantizeNotes(gridBeats: 0.25, strength: 1, inTrackAt: 0)
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].startBeat, 0.3, accuracy: 0.0001)  // untouched
+        XCTAssertEqual(doc.project.tracks[0].regions[1].notes[0].startBeat, 0.25, accuracy: 0.0001) // quantized
+    }
+
     func testQuantizeNotesIsNotUndoRegistered() {
         let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.3, lengthBeats: 1)
         let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])

@@ -81,4 +81,37 @@ final class QuantizerTests: XCTestCase {
         XCTAssertEqual(nanResult[0].startBeat, 0.3, accuracy: 0.0001)
         XCTAssertEqual(infResult[0].startBeat, 0.3, accuracy: 0.0001)
     }
+
+    // Quantizing a whole take is the feature's actual purpose, so these cover more
+    // than the single note every other case above passes.
+
+    func testMultipleNotesArePreservedInCountAndID() {
+        let noteA = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.1, lengthBeats: 1)
+        let noteB = NoteEvent(pitch: 64, velocity: 90, startBeat: 0.9, lengthBeats: 1)
+        let noteC = NoteEvent(pitch: 67, velocity: 80, startBeat: 1.6, lengthBeats: 1)
+        let result = Quantizer.quantize([noteA, noteB, noteC], gridBeats: 0.5, strength: 1)
+
+        XCTAssertEqual(result.count, 3)
+        XCTAssertEqual(result.map(\.id), [noteA.id, noteB.id, noteC.id])
+        // Each note snaps independently on a 0.5 grid: 0.1/0.5 = 0.2 rounds to 0 * 0.5 = 0.0;
+        // 0.9/0.5 = 1.8 rounds to 2 * 0.5 = 1.0; 1.6/0.5 = 3.2 rounds to 3 * 0.5 = 1.5.
+        XCTAssertEqual(result[0].startBeat, 0.0, accuracy: 0.0001)
+        XCTAssertEqual(result[1].startBeat, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(result[2].startBeat, 1.5, accuracy: 0.0001)
+    }
+
+    func testNotesCollapsingToTheSameGridLineKeepDistinctIDs() {
+        // Both land on the same grid line from opposite sides: 0.20/0.25 = 0.8 rounds to
+        // 1 * 0.25 = 0.25, and 0.30/0.25 = 1.2 also rounds to 1 * 0.25 = 0.25. Neither note
+        // is dropped or merged — quantize is a position edit, not a deduplication.
+        let noteA = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.20, lengthBeats: 1)
+        let noteB = NoteEvent(pitch: 64, velocity: 90, startBeat: 0.30, lengthBeats: 1)
+        let result = Quantizer.quantize([noteA, noteB], gridBeats: 0.25, strength: 1)
+
+        XCTAssertEqual(result.count, 2)
+        XCTAssertNotEqual(result[0].id, result[1].id)
+        XCTAssertEqual(result[0].startBeat, 0.25, accuracy: 0.0001)
+        XCTAssertEqual(result[1].startBeat, 0.25, accuracy: 0.0001)
+        XCTAssertEqual(result[0].startBeat, result[1].startBeat, accuracy: 0.0001)
+    }
 }
