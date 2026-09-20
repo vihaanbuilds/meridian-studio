@@ -32,6 +32,13 @@ track at all, silently, via the bounds guard. It is unreachable today
 only because no UI path can invoke undo; capturing the track `id` instead
 of its index is the fix.
 
+A second thing to settle before that day: `quantizeNotes`, like
+`updateNote`, is a field edit with no undo registration — but unlike a
+single-note edit it can discard an entire take's recorded timing in one
+click, irreversibly. When undo is surfaced in the UI, that will need
+reconsidering, most likely by registering a single compound undo action
+covering the whole quantize pass.
+
 Multi-track support (Phase 2): `addTrack`/`removeTrack` are
 undo-registered structural operations, matching `addRegion`/
 `removeRegion`; `setTrackMuted`/`setTrackSolo` are direct field
@@ -59,10 +66,15 @@ turns drag gestures into `updateNote` calls (move changes
 `Backspace` into a `deleteNotes` call.
 
 Quantization (Phase 2, the last piece of "Full MIDI editing"):
-`Quantizer.quantize(_:gridBeats:strength:)` is pure logic in
+`Quantizer.quantize(_:gridBeats:strength:maxStartBeat:)` is pure logic in
 `ProjectModel` — for each note, it moves `startBeat` toward the nearest
-grid line by `strength` (0...1, clamped; 0 = no change, 1 = a hard
-snap), leaving every other field untouched.
+grid line by `strength` (0...1, clamped, with a non-finite value treated
+as 0 for the same NaN reason `setTempo` documents; 0 = no change, 1 = a
+hard snap), leaving every other field untouched. `maxStartBeat` is an
+optional upper bound on where a note may end, defaulting to no bound:
+the UI layer passes `PianoRollView.canvasBeats` so quantizing cannot
+push a note off the reachable canvas any more than dragging can, while
+`ProjectModel` itself keeps no canvas constants.
 `ProjectDocument.quantizeNotes` applies it to a track's current region
 and, like `updateNote`, is a field edit with no undo registration — a
 batch position edit is conceptually many field edits, not a removal.

@@ -215,7 +215,7 @@ control.
 |---|---|---|
 | 0 | Architecture & planning | This document |
 | 1 | App shell: transport, one MIDI track, MIDI record/playback, timeline, piano roll, save/open, tests | **This milestone — detailed below** |
-| 2 | Full MIDI DAW: multi-track, quantization strength options, richer piano roll editing | Not started |
+| 2 | Full MIDI DAW: multi-track, quantization strength options, richer piano roll editing | Complete |
 | 3 | Audio DAW: audio input recording, waveform, editing (trim/split/fades/normalize) | Not started |
 | 4 | Mixer: channel strips, EQ, compressor, reverb, delay, metering | Not started |
 | 5 | Automation: volume/pan/plugin params, read/write/touch/latch | Not started |
