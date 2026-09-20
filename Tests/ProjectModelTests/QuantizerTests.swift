@@ -139,4 +139,14 @@ final class QuantizerTests: XCTestCase {
         let result = Quantizer.quantize([note], gridBeats: 0.5, strength: 1, maxStartBeat: 4)
         XCTAssertEqual(result[0].startBeat, 0.0, accuracy: 0.0001)
     }
+
+    func testMaxStartBeatLeavesANoteAlreadyBeyondTheBoundWhereItIs() {
+        // A take longer than the canvas (>10s at the default 120 BPM) has notes past
+        // beat 20. Clamping those unconditionally would stack the take's whole tail
+        // onto a single beat, with no undo to recover it — the bound only holds notes
+        // that started inside it, never drags an already-unreachable note back.
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 30.3, lengthBeats: 1)
+        let result = Quantizer.quantize([note], gridBeats: 0.25, strength: 1, maxStartBeat: 20)
+        XCTAssertEqual(result[0].startBeat, 30.25, accuracy: 0.0001)
+    }
 }

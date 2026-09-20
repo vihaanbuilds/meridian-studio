@@ -73,8 +73,13 @@ as 0 for the same NaN reason `setTempo` documents; 0 = no change, 1 = a
 hard snap), leaving every other field untouched. `maxStartBeat` is an
 optional upper bound on where a note may end, defaulting to no bound:
 the UI layer passes `PianoRollView.canvasBeats` so quantizing cannot
-push a note off the reachable canvas any more than dragging can, while
-`ProjectModel` itself keeps no canvas constants.
+push a *reachable* note off the canvas any more than dragging can,
+while `ProjectModel` itself keeps no canvas constants. The bound only
+holds notes that already start inside it — a note already past it (the
+normal state of anything more than ~10s into a take, since the
+recorder places notes with no upper bound on `startBeat`) is left
+alone rather than dragged back, which would otherwise stack an entire
+take's tail onto one beat with no undo to recover it.
 `ProjectDocument.quantizeNotes` applies it to a track's current region
 and, like `updateNote`, is a field edit with no undo registration — a
 batch position edit is conceptually many field edits, not a removal.
