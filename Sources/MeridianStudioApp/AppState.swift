@@ -261,6 +261,12 @@ final class AppState: ObservableObject {
     }
 
     func applyQuantization() {
-        document.quantizeNotes(gridBeats: quantizeGridBeats, strength: quantizeStrength, inTrackAt: selectedTrackIndex)
+        // The same bound `PianoRollView.moveGesture` clamps drags to (its canvas is
+        // 800pt at 40 points-per-beat = 20 beats), taken from that view rather than
+        // restated here so the two cannot drift apart. Without it, quantizing a note
+        // near the canvas edge could push it out of the reachable/scrollable area the
+        // exact way an unclamped drag could — invisible, unreachable by scrolling, and
+        // unrecoverable, since neither updateNote nor quantizeNotes is undo-registered.
+        document.quantizeNotes(gridBeats: quantizeGridBeats, strength: quantizeStrength, maxStartBeat: PianoRollView.canvasBeats, inTrackAt: selectedTrackIndex)
     }
 }

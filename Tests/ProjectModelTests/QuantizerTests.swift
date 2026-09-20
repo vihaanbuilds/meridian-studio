@@ -114,4 +114,29 @@ final class QuantizerTests: XCTestCase {
         XCTAssertEqual(result[1].startBeat, 0.25, accuracy: 0.0001)
         XCTAssertEqual(result[0].startBeat, result[1].startBeat, accuracy: 0.0001)
     }
+
+    // `maxStartBeat` is the optional upper bound the UI supplies so a quantized note
+    // cannot be pushed off the reachable canvas.
+
+    func testMaxStartBeatHoldsAQuantizedNoteInsideTheBound() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 19.4, lengthBeats: 1)
+        // 19.4/0.5 = 38.8 rounds to 39 * 0.5 = 19.5, which would put the note's end at
+        // 20.5 — past the bound. The clamp pulls the start back to 20 - 1 = 19.
+        let result = Quantizer.quantize([note], gridBeats: 0.5, strength: 1, maxStartBeat: 20)
+        XCTAssertEqual(result[0].startBeat, 19.0, accuracy: 0.0001)
+    }
+
+    func testOmittingMaxStartBeatLeavesTheQuantizedPositionUnclamped() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 19.4, lengthBeats: 1)
+        let result = Quantizer.quantize([note], gridBeats: 0.5, strength: 1)
+        XCTAssertEqual(result[0].startBeat, 19.5, accuracy: 0.0001)
+    }
+
+    func testMaxStartBeatNeverPushesANoteBeforeBeatZero() {
+        // A note longer than the whole bound: 4 - 8 is negative, so the clamp floors at 0
+        // rather than dragging the note to a negative startBeat.
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 1.1, lengthBeats: 8)
+        let result = Quantizer.quantize([note], gridBeats: 0.5, strength: 1, maxStartBeat: 4)
+        XCTAssertEqual(result[0].startBeat, 0.0, accuracy: 0.0001)
+    }
 }

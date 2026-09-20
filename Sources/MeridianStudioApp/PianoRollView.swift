@@ -11,7 +11,10 @@ struct PianoRollView: View {
     // `.onDeleteCommand` may never fire. Tapping a note moves focus to the roll.
     @FocusState private var isFocused: Bool
 
-    private let pixelsPerBeat: CGFloat = 40
+    // `static` (along with `canvasWidth` below) only because `canvasBeats` is
+    // derived from the two of them and is read from outside an instance, by
+    // `AppState.applyQuantization`. Every other constant here stays instance-level.
+    static let pixelsPerBeat: CGFloat = 40
     private let pixelsPerSemitone: CGFloat = 6
     private let lowestPitch: UInt8 = 36
     private let highestPitch: UInt8 = 96
@@ -24,10 +27,16 @@ struct PianoRollView: View {
     // +1 because 36...96 is 61 rows, not 60: without it the bottom row starts
     // exactly at the scrollable edge and a note dragged there can't be scrolled
     // back into view.
-    private let canvasWidth: CGFloat = 800
+    static let canvasWidth: CGFloat = 800
     private var canvasHeight: CGFloat {
         CGFloat(Int(highestPitch) - Int(lowestPitch) + 1) * pixelsPerSemitone
     }
+
+    /// The last beat the canvas can show (800pt / 40 points-per-beat = 20). The
+    /// single source of truth for "how far right a note may go": `moveGesture`
+    /// clamps drags to it, and `AppState.applyQuantization` passes it to
+    /// `quantizeNotes` so a quantized note cannot be pushed out of reach either.
+    static let canvasBeats: Double = Double(canvasWidth / pixelsPerBeat)
 
     private var notes: [NoteEvent] {
         guard appState.document.project.tracks.indices.contains(appState.selectedTrackIndex) else { return [] }
@@ -57,7 +66,7 @@ struct PianoRollView: View {
         ScrollView([.horizontal, .vertical]) {
             ZStack(alignment: .topLeading) {
                 Color.clear
-                    .frame(width: canvasWidth, height: canvasHeight)
+                    .frame(width: Self.canvasWidth, height: canvasHeight)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         appState.selectNote(id: nil)
@@ -77,7 +86,7 @@ struct PianoRollView: View {
                         .offset(x: 0, y: yOffset(forPitch: pitch))
                 }
             }
-            .frame(width: canvasWidth, height: canvasHeight, alignment: .topLeading)
+            .frame(width: Self.canvasWidth, height: canvasHeight, alignment: .topLeading)
         }
         .background(Color(nsColor: .textBackgroundColor))
         .focusable()
@@ -89,7 +98,7 @@ struct PianoRollView: View {
 
     private func noteRectangle(for note: NoteEvent) -> some View {
         let isSelected = appState.selectedNoteID == note.id
-        let width = max(CGFloat(note.lengthBeats) * pixelsPerBeat, 4)
+        let width = max(CGFloat(note.lengthBeats) * Self.pixelsPerBeat, 4)
 
         return Rectangle()
             .fill(isSelected ? Color.accentColor : Color.green.opacity(0.8))
@@ -118,7 +127,7 @@ struct PianoRollView: View {
             // top-left of the piano roll instead of on the note. Applying the
             // offset outermost puts the handle inside the shifted subtree, so it
             // tracks the note — and it still needs no `.offset` of its own.
-            .offset(x: CGFloat(note.startBeat) * pixelsPerBeat, y: yOffset(forPitch: note.pitch))
+            .offset(x: CGFloat(note.startBeat) * Self.pixelsPerBeat, y: yOffset(forPitch: note.pitch))
     }
 
     // Both drag gestures measure translation in `.global` rather than the default
@@ -132,14 +141,13 @@ struct PianoRollView: View {
             .onChanged { value in
                 let start = dragStartNote ?? note
                 if dragStartNote == nil { dragStartNote = note }
-                let deltaBeats = Double(value.translation.width / pixelsPerBeat)
+                let deltaBeats = Double(value.translation.width / Self.pixelsPerBeat)
                 let deltaPitch = -Int((value.translation.height / pixelsPerSemitone).rounded())
                 var updated = start
-                // Keep the note's right edge within the canvas (800pt / pixelsPerBeat
-                // = 20 beats) — past that it becomes invisible, unreachable by
-                // scrolling (the scrollable content size is fixed), and unrecoverable
-                // since updateNote isn't undo-registered.
-                let maxStartBeat = max(Double(canvasWidth / pixelsPerBeat) - start.lengthBeats, 0)
+                // Keep the note's right edge within the canvas — past that it becomes
+                // invisible, unreachable by scrolling (the scrollable content size is
+                // fixed), and unrecoverable since updateNote isn't undo-registered.
+                let maxStartBeat = max(Self.canvasBeats - start.lengthBeats, 0)
                 updated.startBeat = min(max(start.startBeat + deltaBeats, 0), maxStartBeat)
                 updated.pitch = clampPitch(Int(start.pitch) + deltaPitch)
                 appState.selectNote(id: note.id)
@@ -156,7 +164,7 @@ struct PianoRollView: View {
             .onChanged { value in
                 let start = dragStartNote ?? note
                 if dragStartNote == nil { dragStartNote = note }
-                let deltaBeats = Double(value.translation.width / pixelsPerBeat)
+                let deltaBeats = Double(value.translation.width / Self.pixelsPerBeat)
                 var updated = start
                 updated.lengthBeats = max(start.lengthBeats + deltaBeats, minimumNoteLengthBeats)
                 appState.selectNote(id: note.id)

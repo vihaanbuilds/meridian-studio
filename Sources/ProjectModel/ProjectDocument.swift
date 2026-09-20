@@ -98,11 +98,15 @@ public final class ProjectDocument: ObservableObject {
         }
     }
 
-    public func quantizeNotes(gridBeats: Double, strength: Double, inTrackAt trackIndex: Int) {
+    /// `maxStartBeat` is passed straight through to `Quantizer.quantize`: an
+    /// optional upper bound on where a quantized note may end, supplied by the
+    /// UI that has to keep the note reachable. `nil` (the default) means no
+    /// bound.
+    public func quantizeNotes(gridBeats: Double, strength: Double, maxStartBeat: Double? = nil, inTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
         let notes = project.tracks[trackIndex].regions[regionIndex].notes
-        project.tracks[trackIndex].regions[regionIndex].notes = Quantizer.quantize(notes, gridBeats: gridBeats, strength: strength)
+        project.tracks[trackIndex].regions[regionIndex].notes = Quantizer.quantize(notes, gridBeats: gridBeats, strength: strength, maxStartBeat: maxStartBeat)
     }
 
     public func setTempo(_ tempo: Double) {
