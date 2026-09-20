@@ -10,6 +10,7 @@ struct ContentView: View {
                     .frame(minWidth: 160, idealWidth: 200, maxWidth: 260)
                 VStack(spacing: 0) {
                     TimelineView()
+                    QuantizeControlView()
                     PianoRollView()
                 }
             }
