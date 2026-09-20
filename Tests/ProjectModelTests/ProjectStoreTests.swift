@@ -21,6 +21,50 @@ final class ProjectStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.appendingPathComponent("midi").path))
     }
 
+    /// `testSaveAndLoadRoundTrips` (and `CodableRoundTripTests`) compare notes with
+    /// `NoteEvent`'s content-only `==`, which deliberately ignores `id` — so they
+    /// would stay green even if every note id were dropped or regenerated on load.
+    /// That would silently break selection/move/resize/delete for every reopened
+    /// project, so assert on the ids specifically.
+    func testSaveAndLoadPreservesNoteIDs() throws {
+        let noteA = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let noteB = NoteEvent(pitch: 64, velocity: 90, startBeat: 1, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [noteA, noteB])
+        let project = Project(tracks: [Track(name: "Piano", regions: [region])])
+        let url = makeTempBundleURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        try ProjectStore.save(project, to: url)
+        let loaded = try ProjectStore.load(from: url)
+
+        let loadedIDs = Set(loaded.tracks[0].regions[0].notes.map(\.id))
+        XCTAssertEqual(loadedIDs, [noteA.id, noteB.id])
+    }
+
+    /// `NoteEventTests.testDecodingWithoutIDSynthesizesOne` exercises a bare
+    /// `JSONDecoder().decode(NoteEvent.self, ...)`; the real "open an old project"
+    /// path is `ProjectStore.load` → `Project` → `Track` → `MIDIRegion` →
+    /// `NoteEvent`. The two legacy notes below are byte-identical in musical content
+    /// and carry no `id` key, so this also pins down that identical legacy notes get
+    /// DISTINCT synthesized ids — what `PianoRollView`'s `ForEach(notes)` relies on
+    /// for correct SwiftUI view identity.
+    func testLoadSynthesizesDistinctIDsForLegacyNotesWithoutID() throws {
+        let url = makeTempBundleURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+
+        let legacyJSON = """
+        {"schemaVersion": 1, "sampleRate": 44100, "tempo": 120, "timeSignature": {"numerator": 4, "denominator": 4}, "tracks": [{"id": "11111111-1111-1111-1111-111111111111", "name": "Piano", "kind": "midi", "muted": false, "solo": false, "regions": [{"id": "22222222-2222-2222-2222-222222222222", "startBeat": 0, "lengthBeats": 4, "notes": [{"pitch": 60, "velocity": 100, "startBeat": 0, "lengthBeats": 1}, {"pitch": 60, "velocity": 100, "startBeat": 0, "lengthBeats": 1}]}]}]}
+        """
+        try legacyJSON.write(to: url.appendingPathComponent("project.json"), atomically: true, encoding: .utf8)
+
+        let loaded = try ProjectStore.load(from: url)
+
+        let notes = loaded.tracks[0].regions[0].notes
+        XCTAssertEqual(notes.count, 2)
+        XCTAssertNotEqual(notes[0].id, notes[1].id)
+    }
+
     func testLoadRejectsUnsupportedSchemaVersion() throws {
         let url = makeTempBundleURL()
         defer { try? FileManager.default.removeItem(at: url) }
