@@ -19,6 +19,16 @@ struct PianoRollView: View {
     private let resizeHandleWidth: CGFloat = 6
     private let minimumNoteLengthBeats: Double = 0.0625
 
+    // Single source of truth for the canvas, so the drag clamps in `moveGesture`
+    // cannot drift out of lockstep with the frames the body renders. Height is
+    // +1 because 36...96 is 61 rows, not 60: without it the bottom row starts
+    // exactly at the scrollable edge and a note dragged there can't be scrolled
+    // back into view.
+    private let canvasWidth: CGFloat = 800
+    private var canvasHeight: CGFloat {
+        CGFloat(Int(highestPitch) - Int(lowestPitch) + 1) * pixelsPerSemitone
+    }
+
     private var notes: [NoteEvent] {
         guard appState.document.project.tracks.indices.contains(appState.selectedTrackIndex) else { return [] }
         return appState.document.project.tracks[appState.selectedTrackIndex].regions.last?.notes ?? []
@@ -47,10 +57,7 @@ struct PianoRollView: View {
         ScrollView([.horizontal, .vertical]) {
             ZStack(alignment: .topLeading) {
                 Color.clear
-                    .frame(
-                        width: 800,
-                        height: CGFloat(highestPitch - lowestPitch) * pixelsPerSemitone
-                    )
+                    .frame(width: canvasWidth, height: canvasHeight)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         appState.selectNote(id: nil)
@@ -70,11 +77,7 @@ struct PianoRollView: View {
                         .offset(x: 0, y: yOffset(forPitch: pitch))
                 }
             }
-            .frame(
-                width: 800,
-                height: CGFloat(highestPitch - lowestPitch) * pixelsPerSemitone,
-                alignment: .topLeading
-            )
+            .frame(width: canvasWidth, height: canvasHeight, alignment: .topLeading)
         }
         .background(Color(nsColor: .textBackgroundColor))
         .focusable()
@@ -136,10 +139,11 @@ struct PianoRollView: View {
                 // = 20 beats) — past that it becomes invisible, unreachable by
                 // scrolling (the scrollable content size is fixed), and unrecoverable
                 // since updateNote isn't undo-registered.
-                let maxStartBeat = max(800 / Double(pixelsPerBeat) - start.lengthBeats, 0)
+                let maxStartBeat = max(Double(canvasWidth / pixelsPerBeat) - start.lengthBeats, 0)
                 updated.startBeat = min(max(start.startBeat + deltaBeats, 0), maxStartBeat)
                 updated.pitch = clampPitch(Int(start.pitch) + deltaPitch)
                 appState.selectNote(id: note.id)
+                isFocused = true
                 appState.moveOrResizeSelectedNote(to: updated)
             }
             .onEnded { _ in
@@ -156,6 +160,7 @@ struct PianoRollView: View {
                 var updated = start
                 updated.lengthBeats = max(start.lengthBeats + deltaBeats, minimumNoteLengthBeats)
                 appState.selectNote(id: note.id)
+                isFocused = true
                 appState.moveOrResizeSelectedNote(to: updated)
             }
             .onEnded { _ in
