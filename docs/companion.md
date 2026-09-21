@@ -28,7 +28,12 @@ At the start of each session, `CompanionState.hasMIDIDevice` checks
 `.audio`-kind track records via `AudioRecorder` — both exactly as
 Meridian Studio's own `AppState` uses them. Detection is fresh at every
 Start, not cached at launch, since a keyboard could be plugged in or
-unplugged between sessions.
+unplugged between sessions. Because CoreMIDI has no hot-plug support in
+this codebase (see `docs/midi.md`), `startSession()`'s `.midi` branch
+also closes and reopens `midiInput` right before recording, so a
+keyboard connected after launch is actually picked up rather than just
+detected — without this, `hasMIDIDevice` could report `true` while the
+already-open MIDI port was still connected to nothing.
 
 ## Trends
 
@@ -43,5 +48,8 @@ recorded and saved, so nothing here blocks adding that metric later.
 
 If no MIDI device is present and microphone access is denied, an audio
 session still "succeeds" while capturing only silence — no error is
-surfaced anywhere. Same class of gap as Meridian Studio's own recording
-path (see `docs/audio.md`); not solved by this milestone.
+surfaced anywhere beyond the generic "didn't record anything" message
+`stopSession()` shows for any empty take. Same class of gap as Meridian
+Studio's own recording path (see `docs/audio.md`); not solved by this
+milestone. A denied-microphone session is indistinguishable, from the
+app's point of view, from any other take that captured nothing.

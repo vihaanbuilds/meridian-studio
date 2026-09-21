@@ -45,6 +45,21 @@ enum SessionLibrary {
         return sessionDateFormatter.date(from: String(filename[start..<end]))
     }
 
+    /// The region length (in beats) a completed MIDI take should be saved
+    /// with. Using only the last note's release time (as a DAW region
+    /// legitimately does — see `AppState.stopRecording()`) understates a
+    /// session's real length whenever the patient leaves silence before
+    /// pressing Stop, which makes the trend chart's "duration" metric mean
+    /// different things for MIDI vs. audio sessions. `finalBeat` — the
+    /// whole Start→Stop span — is the floor; the last note's own end is
+    /// still taken in case `finalize(atBeat:)` ever reports a beat earlier
+    /// than a note that's already ended (not reachable today, but this
+    /// keeps the region from ever being shorter than its own notes).
+    static func midiRegionLengthBeats(finalBeat: Double, notes: [NoteEvent]) -> Double {
+        let lastNoteEnd = notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        return max(ceil(finalBeat), ceil(lastNoteEnd), 1)
+    }
+
     /// Scans `sessionsDirectory` for every session bundle, loads each via
     /// unmodified `ProjectStore.load`, and computes its duration in real
     /// seconds via unmodified `Tempo.seconds(forBeats:tempo:)` — no
@@ -70,6 +85,14 @@ enum SessionLibrary {
                 lengthBeats = track.regions.first?.lengthBeats ?? 0
             }
             let durationSeconds = Tempo.seconds(forBeats: lengthBeats, tempo: project.tempo)
+            // Every legitimately completed session has a strictly positive
+            // duration by construction (CompanionState floors both region
+            // kinds above zero). A duration of exactly 0 is reachable only
+            // from a bundle `startSession()` created but `stopSession()`
+            // never finished — e.g. the app was quit mid-session. Filtering
+            // it here (not by adding cleanup elsewhere) keeps the fix in
+            // this one pure, already-tested function.
+            guard durationSeconds > 0 else { return nil }
             return SessionSummary(id: url, date: date, kind: track.kind, durationSeconds: durationSeconds)
         }
         return summaries.sorted { $0.date < $1.date }

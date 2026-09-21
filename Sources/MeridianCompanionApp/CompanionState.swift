@@ -41,6 +41,14 @@ final class CompanionState: ObservableObject {
 
     private static let queuePollInterval: TimeInterval = 0.01
     private static let audioFileName = "take.wav"
+    /// Shown when a session ends with nothing captured — a denied
+    /// microphone, a MIDI keyboard that never sent a note, or (see
+    /// `startSession()`'s `.midi` branch) a keyboard `midiInput` failed to
+    /// reconnect to. Deliberately generic rather than naming a specific
+    /// cause, since `stopSession()` can't distinguish which of these
+    /// happened, only that nothing was captured either way.
+    private static let nothingRecordedMessage =
+        "That session didn't record anything. Check that your microphone or MIDI keyboard is connected, then try again."
 
     init() {
         audioRecorder = AudioRecorder(engine: playbackEngine.engine)
@@ -110,6 +118,14 @@ final class CompanionState: ObservableObject {
 
     func startSession() {
         guard !isRecording else { return }
+        // FIX (N3): a stale error from a previous session must not linger
+        // and read as "something is wrong right now."
+        lastError = nil
+        // FIX (N2): a session in progress from a previous "Play Last
+        // Session" press must not keep playing into this one — on the
+        // audio path the microphone tap would otherwise record the
+        // speakers' own playback into the new take.
+        playbackEngine.stopAllNotes()
         let kind: TrackKind = hasMIDIDevice ? .midi : .audio
         let sessionsDirectory = SessionLibrary.sessionsDirectory()
         let bundleURL = SessionLibrary.bundleURL(for: Date(), in: sessionsDirectory)
@@ -126,6 +142,28 @@ final class CompanionState: ObservableObject {
 
         switch kind {
         case .midi:
+            // FIX (B2, part 2): `midiInput` connected to whatever sources
+            // existed at `init()` time and never reconnects on its own —
+            // CoreMIDI hot-plug isn't supported in this codebase (see
+            // docs/midi.md). `hasMIDIDevice` above reads the system-wide
+            // source count fresh, which can now disagree with what
+            // `midiInput` is actually connected to (a keyboard plugged in
+            // after launch, or a virtual source appearing later). Reopen
+            // the port right before recording so a newly-available source
+            // is actually picked up, not just detected.
+            midiInput.stop()
+            do {
+                try midiInput.start()
+            } catch {
+                print("MIDI input unavailable: \(error)")
+            }
+            // FIX (N8): clear anything already queued before the take
+            // started — mirrors `MeridianStudioApp.AppState.startRecording()`'s
+            // same drain. `isRecording` is still false here, so this feeds
+            // nothing to the recorder; it only keeps `isNoteSounding` in
+            // sync and discards stale pre-take messages (including any the
+            // reconnect above might have produced).
+            drainMIDIQueue()
             midiRecorder.reset()
             recordingClock.tempo = project.tempo
             recordingClock.startDate = Date()
@@ -163,17 +201,24 @@ final class CompanionState: ObservableObject {
             recordingClock.startDate = nil
             let notes = midiRecorder.recordedNotes
             guard !notes.isEmpty else {
+                // FIX (B2, part 1): surface why nothing was saved, instead
+                // of silently deleting the bundle with no feedback.
+                lastError = Self.nothingRecordedMessage
                 try? FileManager.default.removeItem(at: bundleURL)
                 resetSessionState()
                 refreshSessionHistory()
                 return
             }
-            let lengthBeats = ceil(notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0)
-            project.tracks[0].regions = [MIDIRegion(startBeat: 0, lengthBeats: max(lengthBeats, 1), notes: notes)]
+            // FIX (N1): use the whole take's length, not just the time
+            // until the last note released — see SessionLibrary.swift's
+            // doc comment on `midiRegionLengthBeats` for why.
+            let lengthBeats = SessionLibrary.midiRegionLengthBeats(finalBeat: finalBeat, notes: notes)
+            project.tracks[0].regions = [MIDIRegion(startBeat: 0, lengthBeats: lengthBeats, notes: notes)]
         case .audio:
             isRecording = false
             guard let workingURL = audioRecorder.stop(),
                   let file = try? AVAudioFile(forReading: workingURL) else {
+                lastError = Self.nothingRecordedMessage
                 try? FileManager.default.removeItem(at: bundleURL)
                 resetSessionState()
                 refreshSessionHistory()
@@ -181,6 +226,7 @@ final class CompanionState: ObservableObject {
             }
             let durationSeconds = Double(file.length) / file.processingFormat.sampleRate
             guard durationSeconds > 0 else {
+                lastError = Self.nothingRecordedMessage
                 try? FileManager.default.removeItem(at: bundleURL)
                 resetSessionState()
                 refreshSessionHistory()
@@ -210,6 +256,8 @@ final class CompanionState: ObservableObject {
 
     func playLastSession() {
         guard let last = sessions.last else { return }
+        // FIX (N3): same reasoning as `startSession()` above.
+        lastError = nil
         do {
             let project = try ProjectStore.load(from: last.id)
             guard let track = project.tracks.first else { return }
