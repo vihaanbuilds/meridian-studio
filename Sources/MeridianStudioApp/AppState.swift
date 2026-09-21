@@ -33,6 +33,9 @@ final class AppState: ObservableObject {
     /// tracks MIDI input — a visual cue only, maintained via the same timer
     /// that drains the MIDI queue.
     @Published private(set) var inputLevel: Float = 0
+    /// Live output level while anything (MIDI or audio) is playing back. Reads
+    /// naturally as 0 when nothing is scheduled — the tap receives silence.
+    @Published private(set) var outputLevel: Float = 0
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately
@@ -113,6 +116,7 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 self.drainMIDIQueue()
                 self.inputLevel = self.audioRecorder.level
+                self.outputLevel = self.playbackEngine.level
             }
         }
     }
@@ -191,18 +195,21 @@ final class AppState: ObservableObject {
     func play() {
         let audibleTracks = TrackAudibility.audibleTracks(in: document.project.tracks)
         let regions = audibleTracks.compactMap(\.regions.last)
-        guard !regions.isEmpty else { return }
+        let resolvedAudioRegions = resolveAudioRegions(in: audibleTracks)
+        guard !regions.isEmpty || !resolvedAudioRegions.isEmpty else { return }
         let tempo = document.project.tempo
         playbackCompletionTask?.cancel()
         isPlaying = true
-        playbackEngine.play(regions: regions, tempo: tempo)
+        playbackEngine.play(regions: regions, audioRegions: resolvedAudioRegions, tempo: tempo)
 
         // `PlaybackEngine` has no completion callback, so mirror the run length here
         // to clear `isPlaying` when a play-through ends on its own. Duration is the
-        // longest of every region being played, not just one.
-        let endBeat = regions.map { region in
+        // longest of every region being played, MIDI or audio.
+        let midiEndBeat = regions.map { region in
             max(region.notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0, region.lengthBeats)
         }.max() ?? 0
+        let audioEndBeat = audibleTracks.compactMap(\.audioRegions.last).map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        let endBeat = max(midiEndBeat, audioEndBeat)
         let durationSeconds = Tempo.seconds(forBeats: max(endBeat, 0), tempo: tempo)
         playbackCompletionTask = Task { @MainActor [weak self] in
             do {
@@ -211,6 +218,20 @@ final class AppState: ObservableObject {
                 return  // Superseded by another play() or by stopPlayback().
             }
             self?.isPlaying = false
+        }
+    }
+
+    /// Resolves each audible track's most recent audio region's filename against
+    /// the project bundle's `audio/` directory. Requires `fileURL` — an audio
+    /// track can only ever have a recorded region if the project was already
+    /// saved (see `AppState+AudioRecording.swift`), so this never silently drops
+    /// audio due to a nil `fileURL` in practice.
+    private func resolveAudioRegions(in tracks: [Track]) -> [(url: URL, startBeat: Double)] {
+        guard let fileURL else { return [] }
+        return tracks.compactMap { track in
+            guard let region = track.audioRegions.last else { return nil }
+            let url = fileURL.appendingPathComponent("audio").appendingPathComponent(region.fileName)
+            return (url: url, startBeat: region.startBeat)
         }
     }
 
