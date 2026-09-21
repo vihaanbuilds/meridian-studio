@@ -17,12 +17,17 @@ public enum ProjectStoreError: Error, Equatable, LocalizedError {
 public enum ProjectStore {
     private static let projectFileName = "project.json"
     private static let midiDirectoryName = "midi"
+    private static let audioDirectoryName = "audio"
 
     public static func save(_ project: Project, to url: URL) throws {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         try fileManager.createDirectory(
             at: url.appendingPathComponent(midiDirectoryName, isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try fileManager.createDirectory(
+            at: url.appendingPathComponent(audioDirectoryName, isDirectory: true),
             withIntermediateDirectories: true
         )
 

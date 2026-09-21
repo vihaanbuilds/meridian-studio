@@ -237,4 +237,45 @@ final class ProjectDocumentTests: XCTestCase {
         doc.quantizeNotes(gridBeats: 0.25, strength: 1, inTrackAt: 0)
         XCTAssertTrue(doc.project.tracks[0].regions.isEmpty)
     }
+
+    func testAddAudioRegionAppendsRegion() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Vocals", kind: .audio)]))
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        doc.addAudioRegion(region, toTrackAt: 0)
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 1)
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].fileName, "take1.wav")
+    }
+
+    func testUndoRemovesAddedAudioRegion() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Vocals", kind: .audio)]))
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        doc.addAudioRegion(region, toTrackAt: 0)
+        doc.undoManager.undo()
+        XCTAssertTrue(doc.project.tracks[0].audioRegions.isEmpty)
+    }
+
+    func testRedoReAddsAudioRegion() {
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Vocals", kind: .audio)]))
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        doc.addAudioRegion(region, toTrackAt: 0)
+        doc.undoManager.undo()
+        doc.undoManager.redo()
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 1)
+    }
+
+    func testRemoveAudioRegionRemovesByID() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Vocals", kind: .audio, audioRegions: [region])]))
+        doc.removeAudioRegion(id: region.id, fromTrackAt: 0)
+        XCTAssertTrue(doc.project.tracks[0].audioRegions.isEmpty)
+    }
+
+    func testUndoReInsertsRemovedAudioRegion() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Vocals", kind: .audio, audioRegions: [region])]))
+        doc.removeAudioRegion(id: region.id, fromTrackAt: 0)
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 1)
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].fileName, "take1.wav")
+    }
 }

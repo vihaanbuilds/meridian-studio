@@ -125,4 +125,14 @@ final class ProjectStoreTests: XCTestCase {
             "This project has an invalid tempo (0.0) and cannot be opened."
         )
     }
+
+    func testSaveCreatesAudioDirectory() throws {
+        let project = Project(tracks: [Track(name: "Piano")])
+        let url = makeTempBundleURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        try ProjectStore.save(project, to: url)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.appendingPathComponent("audio").path))
+    }
 }
