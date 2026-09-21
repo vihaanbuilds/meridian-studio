@@ -1,19 +1,36 @@
 // Sources/AudioEngine/PlaybackEngine.swift
 import AVFoundation
 import ProjectModel
+import os
 
 @MainActor
 public final class PlaybackEngine {
-    private let engine = AVAudioEngine()
+    /// Shared with `AudioRecorder`, which needs the same running engine's
+    /// `inputNode` for simultaneous record + play back. `AppState` constructs
+    /// `AudioRecorder(engine: playbackEngine.engine)`, which is why this can't
+    /// stay `private`.
+    public let engine = AVAudioEngine()
     private let sampler = AVAudioUnitSampler()
-    /// Every in-flight `Task` spawned by `play(regions:tempo:)`. Without this, Stop
-    /// could not reach the sleeping tasks and they kept firing note-on/note-off
-    /// after the transport had supposedly stopped.
+    private let audioPlayerNode = AVAudioPlayerNode()
+    /// Every in-flight `Task` spawned by `play(regions:audioRegions:tempo:)`.
+    /// Without this, Stop could not reach the sleeping tasks and they kept
+    /// firing note-on/note-off after the transport had supposedly stopped.
     private var scheduledTasks: [Task<Void, Never>] = []
+    private let currentOutputLevel = OSAllocatedUnfairLock<Float>(initialState: 0)
 
     public init() {
         engine.attach(sampler)
         engine.connect(sampler, to: engine.mainMixerNode, format: nil)
+        engine.attach(audioPlayerNode)
+        engine.connect(audioPlayerNode, to: engine.mainMixerNode, format: nil)
+        audioPlayerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            guard let self else { return }
+            self.currentOutputLevel.withLock { $0 = AudioLevelMeter.peak(of: buffer) }
+        }
+    }
+
+    public var level: Float {
+        currentOutputLevel.withLock { $0 }
     }
 
     public func start() throws {
@@ -25,10 +42,14 @@ public final class PlaybackEngine {
         engine.stop()
     }
 
-    /// Wall-clock scheduling via `Task.sleep`, not sample-accurate `AVAudioTime`
-    /// scheduling — acceptable for Phase 1's "audible and roughly in sync" bar.
-    /// See docs/midi.md for the sample-accurate-scheduling follow-up note.
-    public func play(regions: [MIDIRegion], tempo: Double) {
+    /// Wall-clock scheduling via `Task.sleep` for MIDI notes (not sample-accurate
+    /// `AVAudioTime` scheduling — acceptable for Phase 1's "audible and roughly
+    /// in sync" bar; see docs/midi.md). Audio regions DO use `AVAudioTime`
+    /// scheduling via `scheduleFile`, since `AVAudioPlayerNode` wants it and it
+    /// costs nothing extra here. `audioRegions` are plain `(url, startBeat)`
+    /// pairs, not `AudioRegion` values — this module never resolves filenames
+    /// into project-bundle paths, the app layer does that before calling.
+    public func play(regions: [MIDIRegion], audioRegions: [(url: URL, startBeat: Double)], tempo: Double) {
         // A second Play press must not stack on top of an unstopped previous one.
         // Called once here, not once per region — calling it per region would
         // cancel the previous region's just-scheduled tasks before they run.
@@ -53,10 +74,20 @@ public final class PlaybackEngine {
                 scheduledTasks.append(task)
             }
         }
+        for audioRegion in audioRegions {
+            guard let file = try? AVAudioFile(forReading: audioRegion.url) else { continue }
+            let startSeconds = Tempo.seconds(forBeats: audioRegion.startBeat, tempo: tempo)
+            let when = AVAudioTime(
+                sampleTime: AVAudioFramePosition(max(startSeconds, 0) * file.processingFormat.sampleRate),
+                atRate: file.processingFormat.sampleRate
+            )
+            audioPlayerNode.scheduleFile(file, at: when)
+        }
+        audioPlayerNode.play()
     }
 
     /// Cancels every scheduled note still in flight and silences anything currently
-    /// sounding. Safe to call when nothing is playing.
+    /// sounding, MIDI or audio. Safe to call when nothing is playing.
     public func stopAllNotes() {
         for task in scheduledTasks {
             task.cancel()
@@ -65,5 +96,6 @@ public final class PlaybackEngine {
         for pitch in UInt8(0)...UInt8(127) {
             sampler.stopNote(pitch, onChannel: 0)
         }
+        audioPlayerNode.stop()
     }
 }
