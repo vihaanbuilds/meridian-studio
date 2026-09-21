@@ -7,13 +7,16 @@ let package = Package(
     products: [
         .library(name: "ProjectModel", targets: ["ProjectModel"]),
         .library(name: "AudioEngine", targets: ["AudioEngine"]),
-        .executable(name: "MeridianStudioApp", targets: ["MeridianStudioApp"])
+        .executable(name: "MeridianStudioApp", targets: ["MeridianStudioApp"]),
+        .executable(name: "MeridianCompanionApp", targets: ["MeridianCompanionApp"])
     ],
     targets: [
         .target(name: "ProjectModel"),
         .target(name: "AudioEngine", dependencies: ["ProjectModel"]),
         .executableTarget(name: "MeridianStudioApp", dependencies: ["ProjectModel", "AudioEngine"]),
+        .executableTarget(name: "MeridianCompanionApp", dependencies: ["ProjectModel", "AudioEngine"]),
         .testTarget(name: "ProjectModelTests", dependencies: ["ProjectModel"]),
-        .testTarget(name: "AudioEngineTests", dependencies: ["AudioEngine", "ProjectModel"])
+        .testTarget(name: "AudioEngineTests", dependencies: ["AudioEngine", "ProjectModel"]),
+        .testTarget(name: "MeridianCompanionAppTests", dependencies: ["MeridianCompanionApp", "ProjectModel"])
     ]
 )
