@@ -28,6 +28,11 @@ final class AppState: ObservableObject {
     /// 0...1, how strongly `applyQuantization()` snaps notes toward the grid —
     /// 1.0 (a hard snap) by default.
     @Published var quantizeStrength: Double = 1.0
+    /// Live microphone input level (0...1-ish peak, not calibrated dB) while an
+    /// audio track is armed and recording. Polled the same way `liveNotes`
+    /// tracks MIDI input — a visual cue only, maintained via the same timer
+    /// that drains the MIDI queue.
+    @Published private(set) var inputLevel: Float = 0
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately
@@ -38,8 +43,9 @@ final class AppState: ObservableObject {
 
     let midiInput = CoreMIDIInput()
     let playbackEngine = PlaybackEngine()
+    let audioRecorder: AudioRecorder
     private let recorder: MIDIRecorder
-    private let recordingClock = RecordingClock()
+    let recordingClock = RecordingClock()
     /// Drains `midiInput.queue` continuously, recording or not. Runs for the whole
     /// app lifetime: if it only ran while recording, the queue would silently fill
     /// and drop events, and live input would be invisible outside a take.
@@ -55,6 +61,12 @@ final class AppState: ObservableObject {
         self.recorder = MIDIRecorder(clock: NoteRecorderClock(nowBeats: { [recordingClock] in
             recordingClock.beatsElapsed()
         }))
+        // `playbackEngine`'s own inline initializer has already run by this point
+        // in a class's init, so `playbackEngine.engine` is safe to read here —
+        // sharing the one running AVAudioEngine is required for simultaneous
+        // record + playback (two independent AVAudioEngine instances would each
+        // try to own the system's audio hardware).
+        self.audioRecorder = AudioRecorder(engine: playbackEngine.engine)
         bindDocument()
 
         do {
@@ -98,12 +110,24 @@ final class AppState: ObservableObject {
                 timer.invalidate()
                 return
             }
-            Task { @MainActor in self.drainMIDIQueue() }
+            Task { @MainActor in
+                self.drainMIDIQueue()
+                self.inputLevel = self.audioRecorder.level
+            }
         }
     }
 
+    var armedTrackKind: TrackKind {
+        guard document.project.tracks.indices.contains(selectedTrackIndex) else { return .midi }
+        return document.project.tracks[selectedTrackIndex].kind
+    }
+
     func toggleRecording() {
-        isRecording ? stopRecording() : startRecording()
+        if isRecording {
+            armedTrackKind == .audio ? stopAudioRecording() : stopRecording()
+        } else {
+            armedTrackKind == .audio ? startAudioRecording() : startRecording()
+        }
     }
 
     private func startRecording() {

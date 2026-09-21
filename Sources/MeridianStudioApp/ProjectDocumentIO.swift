@@ -52,7 +52,7 @@ extension AppState {
         }
     }
 
-    private func presentError(_ error: Error) {
+    func presentError(_ error: Error) {
         NSAlert(error: error).runModal()
     }
 }
