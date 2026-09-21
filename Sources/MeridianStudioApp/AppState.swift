@@ -244,6 +244,15 @@ final class AppState: ObservableObject {
     }
 
     func removeTrack(at index: Int) {
+        // Same hazard `selectTrack(at:)` guards against, but sharper here: removing
+        // the armed track mid-take would leave `stopRecording()`/`stopAudioRecording()`
+        // routed by whatever track's kind now occupies `selectedTrackIndex` — for
+        // audio, that mismatch leaves `AudioRecorder`'s tap installed with no code
+        // path left to remove it, which crashes the next recording with a
+        // duplicate-tap error. Blocking removal entirely during a take, like
+        // `selectTrack(at:)` blocks selection, avoids the whole class of hazard
+        // rather than only the audio-specific symptom.
+        guard !isRecording else { return }
         guard document.project.tracks.indices.contains(index) else { return }
         guard document.project.tracks.count > 1 else { return }
         let id = document.project.tracks[index].id
