@@ -1,4 +1,4 @@
-// Sources/MIDIEngine/MIDIMessageParser.swift
+// Sources/AudioEngine/MIDIMessageParser.swift
 public enum ParsedMIDIEvent: Equatable, Sendable {
     case noteOn(pitch: UInt8, velocity: UInt8, timestamp: UInt64)
     case noteOff(pitch: UInt8, timestamp: UInt64)

@@ -1,7 +1,7 @@
-// Tests/MIDIEngineTests/PlaybackSchedulerTests.swift
+// Tests/AudioEngineTests/PlaybackSchedulerTests.swift
 import XCTest
 import ProjectModel
-@testable import MIDIEngine
+@testable import AudioEngine
 
 final class PlaybackSchedulerTests: XCTestCase {
     func testSchedulesNotesAt120BPM() {

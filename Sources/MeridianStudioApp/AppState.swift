@@ -2,7 +2,7 @@
 import Combine
 import Foundation
 import ProjectModel
-import MIDIEngine
+import AudioEngine
 
 @MainActor
 final class AppState: ObservableObject {
@@ -28,6 +28,14 @@ final class AppState: ObservableObject {
     /// 0...1, how strongly `applyQuantization()` snaps notes toward the grid —
     /// 1.0 (a hard snap) by default.
     @Published var quantizeStrength: Double = 1.0
+    /// Live microphone input level (0...1-ish peak, not calibrated dB) while an
+    /// audio track is armed and recording. Polled the same way `liveNotes`
+    /// tracks MIDI input — a visual cue only, maintained via the same timer
+    /// that drains the MIDI queue.
+    @Published private(set) var inputLevel: Float = 0
+    /// Live output level while anything (MIDI or audio) is playing back. Reads
+    /// naturally as 0 when nothing is scheduled — the tap receives silence.
+    @Published private(set) var outputLevel: Float = 0
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately
@@ -38,8 +46,9 @@ final class AppState: ObservableObject {
 
     let midiInput = CoreMIDIInput()
     let playbackEngine = PlaybackEngine()
+    let audioRecorder: AudioRecorder
     private let recorder: MIDIRecorder
-    private let recordingClock = RecordingClock()
+    let recordingClock = RecordingClock()
     /// Drains `midiInput.queue` continuously, recording or not. Runs for the whole
     /// app lifetime: if it only ran while recording, the queue would silently fill
     /// and drop events, and live input would be invisible outside a take.
@@ -55,6 +64,12 @@ final class AppState: ObservableObject {
         self.recorder = MIDIRecorder(clock: NoteRecorderClock(nowBeats: { [recordingClock] in
             recordingClock.beatsElapsed()
         }))
+        // `playbackEngine`'s own inline initializer has already run by this point
+        // in a class's init, so `playbackEngine.engine` is safe to read here —
+        // sharing the one running AVAudioEngine is required for simultaneous
+        // record + playback (two independent AVAudioEngine instances would each
+        // try to own the system's audio hardware).
+        self.audioRecorder = AudioRecorder(engine: playbackEngine.engine)
         bindDocument()
 
         do {
@@ -98,12 +113,25 @@ final class AppState: ObservableObject {
                 timer.invalidate()
                 return
             }
-            Task { @MainActor in self.drainMIDIQueue() }
+            Task { @MainActor in
+                self.drainMIDIQueue()
+                self.inputLevel = self.audioRecorder.level
+                self.outputLevel = self.playbackEngine.level
+            }
         }
     }
 
+    var armedTrackKind: TrackKind {
+        guard document.project.tracks.indices.contains(selectedTrackIndex) else { return .midi }
+        return document.project.tracks[selectedTrackIndex].kind
+    }
+
     func toggleRecording() {
-        isRecording ? stopRecording() : startRecording()
+        if isRecording {
+            armedTrackKind == .audio ? stopAudioRecording() : stopRecording()
+        } else {
+            armedTrackKind == .audio ? startAudioRecording() : startRecording()
+        }
     }
 
     private func startRecording() {
@@ -167,18 +195,21 @@ final class AppState: ObservableObject {
     func play() {
         let audibleTracks = TrackAudibility.audibleTracks(in: document.project.tracks)
         let regions = audibleTracks.compactMap(\.regions.last)
-        guard !regions.isEmpty else { return }
+        let resolvedAudioRegions = resolveAudioRegions(in: audibleTracks)
+        guard !regions.isEmpty || !resolvedAudioRegions.isEmpty else { return }
         let tempo = document.project.tempo
         playbackCompletionTask?.cancel()
         isPlaying = true
-        playbackEngine.play(regions: regions, tempo: tempo)
+        playbackEngine.play(regions: regions, audioRegions: resolvedAudioRegions, tempo: tempo)
 
         // `PlaybackEngine` has no completion callback, so mirror the run length here
         // to clear `isPlaying` when a play-through ends on its own. Duration is the
-        // longest of every region being played, not just one.
-        let endBeat = regions.map { region in
+        // longest of every region being played, MIDI or audio.
+        let midiEndBeat = regions.map { region in
             max(region.notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0, region.lengthBeats)
         }.max() ?? 0
+        let audioEndBeat = audibleTracks.compactMap(\.audioRegions.last).map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        let endBeat = max(midiEndBeat, audioEndBeat)
         let durationSeconds = Tempo.seconds(forBeats: max(endBeat, 0), tempo: tempo)
         playbackCompletionTask = Task { @MainActor [weak self] in
             do {
@@ -187,6 +218,20 @@ final class AppState: ObservableObject {
                 return  // Superseded by another play() or by stopPlayback().
             }
             self?.isPlaying = false
+        }
+    }
+
+    /// Resolves each audible track's most recent audio region's filename against
+    /// the project bundle's `audio/` directory. Requires `fileURL` — an audio
+    /// track can only ever have a recorded region if the project was already
+    /// saved (see `AppState+AudioRecording.swift`), so this never silently drops
+    /// audio due to a nil `fileURL` in practice.
+    private func resolveAudioRegions(in tracks: [Track]) -> [(url: URL, startBeat: Double)] {
+        guard let fileURL else { return [] }
+        return tracks.compactMap { track in
+            guard let region = track.audioRegions.last else { return nil }
+            let url = fileURL.appendingPathComponent("audio").appendingPathComponent(region.fileName)
+            return (url: url, startBeat: region.startBeat)
         }
     }
 
@@ -208,9 +253,9 @@ final class AppState: ObservableObject {
         selectedTrackIndex = index
     }
 
-    func addTrack() {
+    func addTrack(kind: TrackKind = .midi) {
         let name = "Track \(document.project.tracks.count + 1)"
-        document.addTrack(Track(name: name))
+        document.addTrack(Track(name: name, kind: kind))
         // Same hazard `selectTrack(at:)` guards against: `stopRecording()` reads
         // `selectedTrackIndex` at Stop time, so moving the selection mid-take would
         // file the finished take on this new empty track instead of the armed one.
@@ -220,6 +265,15 @@ final class AppState: ObservableObject {
     }
 
     func removeTrack(at index: Int) {
+        // Same hazard `selectTrack(at:)` guards against, but sharper here: removing
+        // the armed track mid-take would leave `stopRecording()`/`stopAudioRecording()`
+        // routed by whatever track's kind now occupies `selectedTrackIndex` — for
+        // audio, that mismatch leaves `AudioRecorder`'s tap installed with no code
+        // path left to remove it, which crashes the next recording with a
+        // duplicate-tap error. Blocking removal entirely during a take, like
+        // `selectTrack(at:)` blocks selection, avoids the whole class of hazard
+        // rather than only the audio-specific symptom.
+        guard !isRecording else { return }
         guard document.project.tracks.indices.contains(index) else { return }
         guard document.project.tracks.count > 1 else { return }
         let id = document.project.tracks[index].id

@@ -17,6 +17,7 @@ public enum ProjectStoreError: Error, Equatable, LocalizedError {
 public enum ProjectStore {
     private static let projectFileName = "project.json"
     private static let midiDirectoryName = "midi"
+    private static let audioDirectoryName = "audio"
 
     public static func save(_ project: Project, to url: URL) throws {
         let fileManager = FileManager.default
@@ -25,11 +26,37 @@ public enum ProjectStore {
             at: url.appendingPathComponent(midiDirectoryName, isDirectory: true),
             withIntermediateDirectories: true
         )
+        try fileManager.createDirectory(
+            at: url.appendingPathComponent(audioDirectoryName, isDirectory: true),
+            withIntermediateDirectories: true
+        )
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(project)
         try data.write(to: url.appendingPathComponent(projectFileName), options: .atomic)
+    }
+
+    /// Copies every file inside `source`'s `audio/` directory into
+    /// `destination`'s `audio/` directory. `destination`'s `audio/` directory
+    /// must already exist (created by `save`) — called by Save As, where
+    /// recorded audio otherwise stays behind at the old bundle while the new
+    /// bundle's `project.json` still references filenames that don't exist
+    /// there. A no-op if `source` has no `audio/` directory (nothing was ever
+    /// recorded) or if `source` and `destination` are the same location.
+    public static func copyAudioFiles(from source: URL, to destination: URL) throws {
+        guard source != destination else { return }
+        let fileManager = FileManager.default
+        let sourceAudioDirectory = source.appendingPathComponent(audioDirectoryName, isDirectory: true)
+        guard fileManager.fileExists(atPath: sourceAudioDirectory.path) else { return }
+        let destinationAudioDirectory = destination.appendingPathComponent(audioDirectoryName, isDirectory: true)
+        for file in try fileManager.contentsOfDirectory(at: sourceAudioDirectory, includingPropertiesForKeys: nil) {
+            let destinationFile = destinationAudioDirectory.appendingPathComponent(file.lastPathComponent)
+            if fileManager.fileExists(atPath: destinationFile.path) {
+                try fileManager.removeItem(at: destinationFile)
+            }
+            try fileManager.copyItem(at: file, to: destinationFile)
+        }
     }
 
     public static func load(from url: URL) throws -> Project {

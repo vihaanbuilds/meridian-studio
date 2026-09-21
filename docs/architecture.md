@@ -6,12 +6,14 @@ separation described in the Phase 0 design spec
 
 - **UI** (`Sources/MeridianStudioApp`) — SwiftUI views: transport,
   track list, timeline, piano roll. Depends on `ProjectModel` and
-  `MIDIEngine`, never the other way around.
+  `AudioEngine`, never the other way around.
 - **Project Model** (`Sources/ProjectModel`) — `Project`, `Track`,
   `MIDIRegion`, `NoteEvent` value types (Codable, UI-independent),
   `ProjectStore` (versioned JSON persistence), and `ProjectDocument`
   (an `UndoManager`-backed observable wrapper). No SwiftUI import.
-- **MIDI Engine** (`Sources/MIDIEngine`) — `CoreMIDIInput` (hardware
+- **Audio Engine** (`Sources/AudioEngine`, renamed from `MIDIEngine`
+  once it grew a non-MIDI real-time I/O path — see the audio recording
+  section below) — `CoreMIDIInput` (hardware
   adapter), `MIDIEventQueue` (thread-safe handoff off the CoreMIDI
   callback thread), `MIDIMessageParser`/`MIDIRecorder` (pure,
   unit-tested note-pairing logic), and `PlaybackEngine`/
@@ -92,5 +94,22 @@ guarded by `OSAllocatedUnfairLock`, drops events rather than blocking
 when full). All project-model mutation happens on the main actor, off
 that callback thread.
 
-There is no audio-recording engine, mixer, or AI layer yet — see the
-roadmap in the Phase 0 spec.
+Audio recording & playback (Phase 3, first milestone): `TrackKind.audio`
+and `AudioRegion` extend the data model the same way multi-track and
+note-level editing did — `Track.audioRegions` decodes to `[]` for any
+project file saved before this field existed, the same
+`decodeIfPresent` pattern `NoteEvent.id` established. `AudioRegion`
+stores only a filename, never an absolute path, so a project bundle can
+move on disk without breaking it; the app layer resolves it against the
+bundle's `audio/` directory. `ProjectDocument.addAudioRegion`/
+`removeAudioRegion` are undo-registered structural operations, mirroring
+`addRegion`/`removeRegion` exactly. Recording onto an audio track
+requires the project to already be saved — audio data is too large to
+hold as an in-memory value the way MIDI notes are, and an unsaved
+project has nowhere on disk to write a file, so this milestone defers
+the temporary-file staging a "record before saving" experience would
+need, the same "leave the adjacent complexity for later" call this
+project has made repeatedly. See `docs/audio.md` for the audio engine's
+real-time-safety tradeoffs, mirroring `docs/midi.md`'s role for MIDI.
+
+There is no mixer or AI layer yet — see the roadmap in the Phase 0 spec.

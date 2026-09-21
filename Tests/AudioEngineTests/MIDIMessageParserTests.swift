@@ -1,6 +1,6 @@
-// Tests/MIDIEngineTests/MIDIMessageParserTests.swift
+// Tests/AudioEngineTests/MIDIMessageParserTests.swift
 import XCTest
-@testable import MIDIEngine
+@testable import AudioEngine
 
 final class MIDIMessageParserTests: XCTestCase {
     func testNoteOnParses() {

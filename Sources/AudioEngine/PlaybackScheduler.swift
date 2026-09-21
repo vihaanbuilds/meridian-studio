@@ -1,4 +1,4 @@
-// Sources/MIDIEngine/PlaybackScheduler.swift
+// Sources/AudioEngine/PlaybackScheduler.swift
 import ProjectModel
 
 public struct ScheduledNote: Equatable {

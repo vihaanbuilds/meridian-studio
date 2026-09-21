@@ -35,6 +35,27 @@ public final class ProjectDocument: ObservableObject {
         }
     }
 
+    public func addAudioRegion(_ region: AudioRegion, toTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        project.tracks[trackIndex].audioRegions.append(region)
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.removeAudioRegion(id: region.id, fromTrackAt: trackIndex)
+            }
+        }
+    }
+
+    public func removeAudioRegion(id: UUID, fromTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == id }) else { return }
+        let removed = project.tracks[trackIndex].audioRegions.remove(at: index)
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.addAudioRegion(removed, toTrackAt: trackIndex)
+            }
+        }
+    }
+
     public func addTrack(_ track: Track) {
         project.tracks.append(track)
         let insertedID = track.id
