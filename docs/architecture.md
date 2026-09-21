@@ -19,6 +19,13 @@ separation described in the Phase 0 design spec
   unit-tested note-pairing logic), and `PlaybackEngine`/
   `PlaybackScheduler` (AVAudioEngine-based playback).
 
+As of the two-app architecture
+(`docs/superpowers/specs/2026-09-20-two-app-architecture-design.md`),
+`ProjectModel` and `AudioEngine` are the entire foundation for a second
+app, `MeridianCompanionApp` (see `docs/companion.md`) — not just
+`MeridianStudioApp`. Neither app imports the other; this is enforced by
+`Package.swift` simply never listing that dependency.
+
 Undo/redo is model-level scaffolding only: `ProjectDocument` owns an
 `UndoManager` that `addRegion`/`removeRegion`/`addTrack`/`removeTrack`
 register with, and unit tests exercise undo and redo directly — but it
