@@ -28,6 +28,9 @@ struct MeridianStudioApp: App {
                     .keyboardShortcut("s", modifiers: .command)
                 Button("Save As…") { appState.saveProjectAs() }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
+                Divider()
+                Button("Import Audio…") { appState.importAudio() }
+                    .keyboardShortcut("i", modifiers: .command)
             }
         }
     }
