@@ -25,10 +25,19 @@ struct TimelineView: View {
                             Rectangle()
                                 .fill(Color.accentColor.opacity(0.6))
                                 .frame(width: CGFloat(region.lengthBeats) * pixelsPerBeat, height: laneHeight)
-                                .offset(x: CGFloat(region.startBeat) * pixelsPerBeat)
                                 .overlay(alignment: .topLeading) {
                                     Text("Region").font(.caption2).padding(2)
                                 }
+                                .offset(x: CGFloat(region.startBeat) * pixelsPerBeat)
+                        }
+                        ForEach(track.audioRegions) { region in
+                            Rectangle()
+                                .fill(Color.orange.opacity(0.6))
+                                .frame(width: CGFloat(region.lengthBeats) * pixelsPerBeat, height: laneHeight)
+                                .overlay(alignment: .topLeading) {
+                                    Text("Audio").font(.caption2).padding(2)
+                                }
+                                .offset(x: CGFloat(region.startBeat) * pixelsPerBeat)
                         }
                     }
                     .frame(minWidth: 800, minHeight: laneHeight, alignment: .topLeading)
