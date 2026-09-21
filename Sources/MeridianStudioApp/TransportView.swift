@@ -32,6 +32,9 @@ struct TransportView: View {
                 TextField("Tempo", value: tempoBinding, format: .number)
                     .frame(width: 60)
             }
+            Divider().frame(height: 20)
+            LevelMeterView(label: "In", level: appState.inputLevel)
+            LevelMeterView(label: "Out", level: appState.outputLevel)
             Spacer()
         }
         .padding(8)

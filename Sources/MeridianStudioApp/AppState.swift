@@ -253,9 +253,9 @@ final class AppState: ObservableObject {
         selectedTrackIndex = index
     }
 
-    func addTrack() {
+    func addTrack(kind: TrackKind = .midi) {
         let name = "Track \(document.project.tracks.count + 1)"
-        document.addTrack(Track(name: name))
+        document.addTrack(Track(name: name, kind: kind))
         // Same hazard `selectTrack(at:)` guards against: `stopRecording()` reads
         // `selectedTrackIndex` at Stop time, so moving the selection mid-take would
         // file the finished take on this new empty track instead of the armed one.

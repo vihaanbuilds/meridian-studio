@@ -9,9 +9,14 @@ struct TrackListView: View {
             HStack {
                 Text("Tracks").font(.headline)
                 Spacer()
-                Button(action: { appState.addTrack() }) {
+                Menu {
+                    Button("Add MIDI Track") { appState.addTrack(kind: .midi) }
+                    Button("Add Audio Track") { appState.addTrack(kind: .audio) }
+                } label: {
                     Image(systemName: "plus")
                 }
+                .menuStyle(.borderlessButton)
+                .frame(width: 24)
             }
             .padding(8)
 
@@ -20,7 +25,7 @@ struct TrackListView: View {
                     HStack {
                         Text(track.name)
                         Spacer()
-                        Text("\(track.regions.count) region(s)")
+                        Text("\(track.kind == .audio ? track.audioRegions.count : track.regions.count) region(s)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Button(action: { appState.toggleMute(at: index) }) {
