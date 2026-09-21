@@ -4,11 +4,13 @@ import ProjectModel
 
 extension AppState {
     func newProject() {
+        guard !isRecording else { return }
         document = ProjectDocument(project: Project(tracks: [Track(name: "Piano")]))
         fileURL = nil
     }
 
     func openProject() {
+        guard !isRecording else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -38,6 +40,14 @@ extension AppState {
         panel.prompt = "Save"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard persist(to: url) else { return }
+        if let previousURL = fileURL {
+            do {
+                try ProjectStore.copyAudioFiles(from: previousURL, to: url)
+            } catch {
+                presentError(error)
+                return
+            }
+        }
         fileURL = url
     }
 

@@ -135,4 +135,46 @@ final class ProjectStoreTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.appendingPathComponent("audio").path))
     }
+
+    func testCopyAudioFilesCopiesExistingFiles() throws {
+        let sourceURL = makeTempBundleURL()
+        let destinationURL = makeTempBundleURL()
+        defer {
+            try? FileManager.default.removeItem(at: sourceURL)
+            try? FileManager.default.removeItem(at: destinationURL)
+        }
+        try ProjectStore.save(Project(tracks: [Track(name: "Piano")]), to: sourceURL)
+        try ProjectStore.save(Project(tracks: [Track(name: "Piano")]), to: destinationURL)
+        let sourceFile = sourceURL.appendingPathComponent("audio").appendingPathComponent("take1.wav")
+        try Data("fake audio".utf8).write(to: sourceFile)
+
+        try ProjectStore.copyAudioFiles(from: sourceURL, to: destinationURL)
+
+        let destinationFile = destinationURL.appendingPathComponent("audio").appendingPathComponent("take1.wav")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destinationFile.path))
+        XCTAssertEqual(try Data(contentsOf: destinationFile), Data("fake audio".utf8))
+    }
+
+    func testCopyAudioFilesNoOpsWhenSourceHasNoAudioDirectory() throws {
+        let sourceURL = makeTempBundleURL()
+        let destinationURL = makeTempBundleURL()
+        defer {
+            try? FileManager.default.removeItem(at: sourceURL)
+            try? FileManager.default.removeItem(at: destinationURL)
+        }
+        try ProjectStore.save(Project(tracks: [Track(name: "Piano")]), to: destinationURL)
+
+        XCTAssertNoThrow(try ProjectStore.copyAudioFiles(from: sourceURL, to: destinationURL))
+    }
+
+    func testCopyAudioFilesNoOpsWhenSourceAndDestinationAreTheSame() throws {
+        let url = makeTempBundleURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        try ProjectStore.save(Project(tracks: [Track(name: "Piano")]), to: url)
+        let file = url.appendingPathComponent("audio").appendingPathComponent("take1.wav")
+        try Data("fake audio".utf8).write(to: file)
+
+        XCTAssertNoThrow(try ProjectStore.copyAudioFiles(from: url, to: url))
+        XCTAssertEqual(try Data(contentsOf: file), Data("fake audio".utf8))
+    }
 }
