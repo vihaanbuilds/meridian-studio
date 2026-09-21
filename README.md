@@ -46,9 +46,10 @@ test files verified by review rather than execution.
 
 ```
 Sources/
-  MeridianStudioApp/   # SwiftUI app (UI layer)
-  ProjectModel/        # Project/Track/Region/NoteEvent model, persistence
-  AudioEngine/         # CoreMIDI input, recording, playback scheduling
+  MeridianStudioApp/     # SwiftUI app (UI layer)
+  MeridianCompanionApp/  # SwiftUI companion app (see docs/companion.md)
+  ProjectModel/          # Project/Track/Region/NoteEvent model, persistence
+  AudioEngine/           # CoreMIDI input, recording, playback scheduling
 Tests/                 # Unit + integration tests for the above
 docs/                  # Architecture, project format, MIDI, testing, evals
 evals/                 # Structured pass/fail evaluation suites
