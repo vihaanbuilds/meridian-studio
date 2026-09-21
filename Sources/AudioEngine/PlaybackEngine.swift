@@ -1,5 +1,5 @@
 // Sources/AudioEngine/PlaybackEngine.swift
-import AVFoundation
+@preconcurrency import AVFoundation
 import ProjectModel
 import os
 

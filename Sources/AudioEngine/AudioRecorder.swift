@@ -1,5 +1,5 @@
 // Sources/AudioEngine/AudioRecorder.swift
-import AVFoundation
+@preconcurrency import AVFoundation
 import os
 
 /// Captures the shared `AVAudioEngine`'s microphone input to a file. Writing to
