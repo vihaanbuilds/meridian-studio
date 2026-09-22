@@ -13,7 +13,7 @@ extension AppState {
     /// is a brand-new region or an older one seen for the first time.
     func waveformPeaks(for region: AudioRegion) -> WaveformPeaks? {
         if let cached = waveformCache[region.fileName] { return cached }
-        guard waveformLoadsInFlight.insert(region.fileName).inserted, let fileURL else { return nil }
+        guard let fileURL, waveformLoadsInFlight.insert(region.fileName).inserted else { return nil }
         let audioDirectory = fileURL.appendingPathComponent("audio")
         let audioFileURL = audioDirectory.appendingPathComponent(region.fileName)
         let peaksFileURL = audioFileURL.deletingPathExtension().appendingPathExtension("peaks")

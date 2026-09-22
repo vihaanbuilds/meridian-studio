@@ -46,6 +46,9 @@ final class AppState: ObservableObject {
     /// Dedupes concurrent loads for the same file. Never cleared on
     /// failure — see `AppState+Waveforms.swift` for why that's
     /// intentional (at most one analysis attempt per file per session).
+    /// Deliberately NOT `@Published`, unlike `waveformCache`: it's mutated
+    /// from inside `TimelineView.body` during a SwiftUI render pass, and
+    /// publishing from there would risk a re-render loop.
     var waveformLoadsInFlight: Set<String> = []
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock

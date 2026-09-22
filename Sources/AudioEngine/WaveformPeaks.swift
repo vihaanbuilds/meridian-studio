@@ -40,9 +40,8 @@ public struct WaveformPeaks: Sendable {
     public static func read(from url: URL) throws -> WaveformPeaks {
         let data = try Data(contentsOf: url)
         let count = data.count / MemoryLayout<Float>.size
-        let magnitudes = data.withUnsafeBytes { raw in
-            Array(raw.bindMemory(to: Float.self))
-        }
+        var magnitudes = [Float](repeating: 0, count: count)
+        _ = magnitudes.withUnsafeMutableBytes { data.copyBytes(to: $0, count: count * MemoryLayout<Float>.size) }
         return WaveformPeaks(magnitudes: magnitudes)
     }
 }
