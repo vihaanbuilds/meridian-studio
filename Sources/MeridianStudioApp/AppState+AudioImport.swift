@@ -19,11 +19,17 @@ enum AudioImportError: Error, LocalizedError {
 }
 
 extension AppState {
+    /// Always creates a new audio track for the imported file, rather than
+    /// offering to add it to the currently selected track. `PlaybackEngine`
+    /// schedules a track's audio on one shared `AVAudioPlayerNode`, which
+    /// only plays a track's most recent audio region — a second region on
+    /// the same track would render in the timeline but never be heard.
+    /// Every audio track this way holds exactly one region, which keeps
+    /// that existing "most recent region" behavior correct rather than
+    /// silently wrong. Playing multiple regions on one track together is
+    /// real, unscoped future work (it needs more than one player node),
+    /// not something to half-support here.
     func importAudio() {
-        // Same hazard class `selectTrack(at:)`/`addTrack()`/`removeTrack(at:)`
-        // already guard against: importing mutates `document.project.tracks`,
-        // and doing that mid-take risks the armed track's index or content
-        // shifting under a recording that reads `selectedTrackIndex` at Stop.
         guard !isRecording else { return }
         guard fileURL != nil else {
             presentError(AudioImportError.projectNotSaved)
@@ -37,37 +43,11 @@ extension AppState {
         panel.prompt = "Import"
         guard panel.runModal() == .OK, let sourceURL = panel.url else { return }
 
-        if document.project.tracks.indices.contains(selectedTrackIndex),
-           document.project.tracks[selectedTrackIndex].kind == .audio {
-            presentImportTargetChoice(for: sourceURL)
-        } else {
-            importAudio(from: sourceURL, creatingNewTrackNamed: sourceURL.deletingPathExtension().lastPathComponent)
-        }
-    }
-
-    private func presentImportTargetChoice(for sourceURL: URL) {
-        let trackName = document.project.tracks[selectedTrackIndex].name
-        let alert = NSAlert()
-        alert.messageText = "Import Audio"
-        alert.informativeText = "Add this file to the selected track, or create a new track for it?"
-        alert.addButton(withTitle: "Add to “\(trackName)”")
-        alert.addButton(withTitle: "Create New Track")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            importAudio(from: sourceURL, toTrackAt: selectedTrackIndex)
-        default:
-            importAudio(from: sourceURL, creatingNewTrackNamed: sourceURL.deletingPathExtension().lastPathComponent)
-        }
+        importAudio(from: sourceURL, creatingNewTrackNamed: sourceURL.deletingPathExtension().lastPathComponent)
     }
 
     private func importAudio(from sourceURL: URL, creatingNewTrackNamed name: String) {
-        document.addTrack(Track(name: name, kind: .audio))
-        importAudio(from: sourceURL, toTrackAt: document.project.tracks.count - 1)
-    }
-
-    private func importAudio(from sourceURL: URL, toTrackAt trackIndex: Int) {
         guard let fileURL else { return }
-        guard document.project.tracks.indices.contains(trackIndex) else { return }
 
         let destinationFileName = "\(UUID().uuidString).\(sourceURL.pathExtension)"
         let destinationURL = fileURL.appendingPathComponent("audio").appendingPathComponent(destinationFileName)
@@ -90,10 +70,19 @@ extension AppState {
             return
         }
 
-        let track = document.project.tracks[trackIndex]
-        let startBeat = track.audioRegions.map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        // Only create the track once the file is validated — an invalid
+        // file must not leave an empty orphan track behind.
+        document.addTrack(Track(name: name, kind: .audio))
+        let trackIndex = document.project.tracks.count - 1
+
         let lengthBeats = Tempo.beats(forSeconds: durationSeconds, tempo: document.project.tempo)
-        let region = AudioRegion(startBeat: startBeat, lengthBeats: max(lengthBeats, 0.1), fileName: destinationFileName)
+        let region = AudioRegion(startBeat: 0, lengthBeats: max(lengthBeats, 0.1), fileName: destinationFileName)
         document.addAudioRegion(region, toTrackAt: trackIndex)
+
+        // Every other track-creating path in the app selects the new track
+        // (see `AppState.addTrack(kind:)`) — mirror that here, both for
+        // consistency and so the import is immediately visible rather than
+        // silently added behind whatever was already selected.
+        selectedTrackIndex = trackIndex
     }
 }

@@ -1,4 +1,5 @@
 // Sources/MeridianStudioApp/TimelineView.swift
+import ProjectModel
 import SwiftUI
 
 struct TimelineView: View {
@@ -12,6 +13,18 @@ struct TimelineView: View {
 
     private var totalHeight: CGFloat {
         CGFloat(appState.document.project.tracks.count) * laneHeight
+    }
+
+    /// The furthest beat any region on this track reaches. `.offset()` is
+    /// layout-transparent — it shifts what's rendered but doesn't grow a
+    /// view's reported size — so a lane's own `.frame(minWidth:)` must be
+    /// sized against this explicitly, or a region offset past the constant
+    /// floor renders outside the ScrollView's content extent and can't be
+    /// scrolled to.
+    private func maxEndBeat(for track: Track) -> Double {
+        let midiEnd = track.regions.map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        let audioEnd = track.audioRegions.map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        return max(midiEnd, audioEnd)
     }
 
     var body: some View {
@@ -40,7 +53,7 @@ struct TimelineView: View {
                                 .offset(x: CGFloat(region.startBeat) * pixelsPerBeat)
                         }
                     }
-                    .frame(minWidth: 800, minHeight: laneHeight, alignment: .topLeading)
+                    .frame(minWidth: max(800, CGFloat(maxEndBeat(for: track)) * pixelsPerBeat), minHeight: laneHeight, alignment: .topLeading)
                     Divider()
                 }
             }
