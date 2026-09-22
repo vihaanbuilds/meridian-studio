@@ -42,8 +42,21 @@ existing precedent for `CoreMIDIInput`. `LevelMeterView` renders it as a
 plain proportional bar. A real meter (logarithmic scale, peak-hold,
 color zones) is later polish.
 
+## Importing existing audio
+A later Phase 3 milestone (see
+`docs/superpowers/specs/2026-09-21-audio-import-design.md`) added
+`AppState.importAudio()`: File > Import Audio… copies a picked file
+into the project bundle (never transcodes it) and always creates a new
+audio track for it — never appends to an existing track. That's a
+deliberate scope limit, not an oversight: `PlaybackEngine` only ever
+plays a track's most recent audio region (see "Playback" above), so a
+second region on one track would render in the timeline but never be
+heard. Every audio track this way holds exactly one region, which keeps
+that existing behavior correct. Playing multiple regions on one track
+together is real, unscoped future work.
+
 ## Non-goals of this milestone
 No waveform rendering (a real visual of the recorded shape, not just a
-level meter), no trim/split/fade/normalize, no importing existing audio
-files, no per-track gain/pan, and no glitch-proof capture under load —
-all deferred to later Phase 3 milestones or Phase 4's mixer.
+level meter), no trim/split/fade/normalize, no per-track gain/pan, and
+no glitch-proof capture under load — all deferred to later Phase 3
+milestones or Phase 4's mixer.

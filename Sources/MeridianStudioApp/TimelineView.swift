@@ -1,4 +1,5 @@
 // Sources/MeridianStudioApp/TimelineView.swift
+import ProjectModel
 import SwiftUI
 
 struct TimelineView: View {
@@ -14,6 +15,18 @@ struct TimelineView: View {
         CGFloat(appState.document.project.tracks.count) * laneHeight
     }
 
+    /// The furthest beat any region on this track reaches. `.offset()` is
+    /// layout-transparent — it shifts what's rendered but doesn't grow a
+    /// view's reported size — so a lane's own `.frame(minWidth:)` must be
+    /// sized against this explicitly, or a region offset past the constant
+    /// floor renders outside the ScrollView's content extent and can't be
+    /// scrolled to.
+    private func maxEndBeat(for track: Track) -> Double {
+        let midiEnd = track.regions.map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        let audioEnd = track.audioRegions.map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        return max(midiEnd, audioEnd)
+    }
+
     var body: some View {
         ScrollView([.horizontal, .vertical]) {
             VStack(alignment: .leading, spacing: 0) {
@@ -25,13 +38,22 @@ struct TimelineView: View {
                             Rectangle()
                                 .fill(Color.accentColor.opacity(0.6))
                                 .frame(width: CGFloat(region.lengthBeats) * pixelsPerBeat, height: laneHeight)
-                                .offset(x: CGFloat(region.startBeat) * pixelsPerBeat)
                                 .overlay(alignment: .topLeading) {
                                     Text("Region").font(.caption2).padding(2)
                                 }
+                                .offset(x: CGFloat(region.startBeat) * pixelsPerBeat)
+                        }
+                        ForEach(track.audioRegions) { region in
+                            Rectangle()
+                                .fill(Color.orange.opacity(0.6))
+                                .frame(width: CGFloat(region.lengthBeats) * pixelsPerBeat, height: laneHeight)
+                                .overlay(alignment: .topLeading) {
+                                    Text("Audio").font(.caption2).padding(2)
+                                }
+                                .offset(x: CGFloat(region.startBeat) * pixelsPerBeat)
                         }
                     }
-                    .frame(minWidth: 800, minHeight: laneHeight, alignment: .topLeading)
+                    .frame(minWidth: max(800, CGFloat(maxEndBeat(for: track)) * pixelsPerBeat), minHeight: laneHeight, alignment: .topLeading)
                     Divider()
                 }
             }
