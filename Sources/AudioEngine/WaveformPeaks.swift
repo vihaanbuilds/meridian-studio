@@ -22,7 +22,13 @@ public struct WaveformPeaks: Sendable {
         }
         var magnitudes: [Float] = []
         while true {
-            try file.read(into: buffer, frameCount: samplesPerBucket)
+            do {
+                try file.read(into: buffer, frameCount: samplesPerBucket)
+            } catch {
+                // AVAudioFile.read(into:frameCount:) throws an error when reading past EOF
+                // instead of returning with frameLength = 0. Treat this as normal EOF.
+                break
+            }
             guard buffer.frameLength > 0 else { break }
             magnitudes.append(AudioLevelMeter.peak(of: buffer))
         }
