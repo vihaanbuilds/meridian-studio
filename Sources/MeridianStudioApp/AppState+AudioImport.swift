@@ -78,6 +78,7 @@ extension AppState {
         let lengthBeats = Tempo.beats(forSeconds: durationSeconds, tempo: document.project.tempo)
         let region = AudioRegion(startBeat: 0, lengthBeats: max(lengthBeats, 0.1), fileName: destinationFileName)
         document.addAudioRegion(region, toTrackAt: trackIndex)
+        _ = waveformPeaks(for: region)
 
         // Every other track-creating path in the app selects the new track
         // (see `AppState.addTrack(kind:)`) — mirror that here, both for

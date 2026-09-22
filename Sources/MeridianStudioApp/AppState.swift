@@ -37,6 +37,17 @@ final class AppState: ObservableObject {
     /// naturally as 0 when nothing is scheduled — the tap receives silence.
     @Published private(set) var outputLevel: Float = 0
 
+    /// Cached waveform peaks for audio regions, keyed by
+    /// `AudioRegion.fileName`. Populated by `waveformPeaks(for:)` in
+    /// `AppState+Waveforms.swift`, off the main thread — `@Published` so
+    /// `TimelineView` redraws once a load completes. Not `private`: both
+    /// this file and `AppState+Waveforms.swift` read and write it.
+    @Published var waveformCache: [String: WaveformPeaks] = [:]
+    /// Dedupes concurrent loads for the same file. Never cleared on
+    /// failure — see `AppState+Waveforms.swift` for why that's
+    /// intentional (at most one analysis attempt per file per session).
+    var waveformLoadsInFlight: Set<String> = []
+
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately
     /// independent of `MIDIRecorder`, which owns the beat-accurate recorded data.
