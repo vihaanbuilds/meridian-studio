@@ -1,4 +1,5 @@
 // Sources/MeridianStudioApp/TimelineView.swift
+import AudioEngine
 import ProjectModel
 import SwiftUI
 
@@ -47,6 +48,11 @@ struct TimelineView: View {
                             Rectangle()
                                 .fill(Color.orange.opacity(0.6))
                                 .frame(width: CGFloat(region.lengthBeats) * pixelsPerBeat, height: laneHeight)
+                                .overlay {
+                                    if let peaks = appState.waveformPeaks(for: region) {
+                                        WaveformView(peaks: peaks)
+                                    }
+                                }
                                 .overlay(alignment: .topLeading) {
                                     Text("Audio").font(.caption2).padding(2)
                                 }
