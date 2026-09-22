@@ -23,9 +23,19 @@ public final class PlaybackEngine {
         engine.connect(sampler, to: engine.mainMixerNode, format: nil)
         engine.attach(audioPlayerNode)
         engine.connect(audioPlayerNode, to: engine.mainMixerNode, format: nil)
-        audioPlayerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            guard let self else { return }
-            self.currentOutputLevel.withLock { $0 = AudioLevelMeter.peak(of: buffer) }
+        // Capture the lock directly, not `self` — this closure runs on a
+        // real-time audio thread, never the main thread. `PlaybackEngine` is
+        // `@MainActor`, so touching *any* of its properties via `self` here
+        // requires main-actor isolation the audio thread doesn't have; the
+        // compiler doesn't catch this (the `@preconcurrency import
+        // AVFoundation` above suppresses that diagnostic), so it only
+        // surfaces as a runtime "data race detected" trap when the tap
+        // actually fires. `OSAllocatedUnfairLock` is genuinely `Sendable`
+        // on its own, so capturing it directly sidesteps the actor-isolation
+        // check instead of working around it.
+        let currentOutputLevel = currentOutputLevel
+        audioPlayerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
+            currentOutputLevel.withLock { $0 = AudioLevelMeter.peak(of: buffer) }
         }
     }
 
