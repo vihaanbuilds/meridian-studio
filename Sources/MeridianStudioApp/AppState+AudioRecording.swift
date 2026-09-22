@@ -5,11 +5,14 @@ import AudioEngine
 
 enum AudioRecordingError: Error, LocalizedError {
     case projectNotSaved
+    case trackAlreadyHasAudio
 
     var errorDescription: String? {
         switch self {
         case .projectNotSaved:
             return "Save this project before recording audio — audio takes are written to a file next to your saved project."
+        case .trackAlreadyHasAudio:
+            return "This track already has an audio region — recording onto it would silently replace what plays back, since only a track's most recent audio region is ever heard. Select a different track, or create a new one."
         }
     }
 }
@@ -20,6 +23,17 @@ extension AppState {
     func startAudioRecording() {
         guard let fileURL else {
             presentError(AudioRecordingError.projectNotSaved)
+            return
+        }
+        // `PlaybackEngine` only ever plays a track's most recent audio
+        // region (`AppState.resolveAudioRegions`), so recording onto a
+        // track that already has one wouldn't fail — it would silently
+        // drop whatever was there, whether that region came from an
+        // earlier take or an import. Block it with a clear message rather
+        // than let it happen invisibly.
+        if document.project.tracks.indices.contains(selectedTrackIndex),
+           !document.project.tracks[selectedTrackIndex].audioRegions.isEmpty {
+            presentError(AudioRecordingError.trackAlreadyHasAudio)
             return
         }
         let workingURL = fileURL.appendingPathComponent("audio").appendingPathComponent(Self.inProgressAudioFileName)
