@@ -21,14 +21,8 @@ public struct WaveformPeaks: Sendable {
             return WaveformPeaks(magnitudes: [])
         }
         var magnitudes: [Float] = []
-        while true {
-            do {
-                try file.read(into: buffer, frameCount: samplesPerBucket)
-            } catch {
-                // AVAudioFile.read(into:frameCount:) throws an error when reading past EOF
-                // instead of returning with frameLength = 0. Treat this as normal EOF.
-                break
-            }
+        while file.framePosition < file.length {
+            try file.read(into: buffer, frameCount: samplesPerBucket)
             guard buffer.frameLength > 0 else { break }
             magnitudes.append(AudioLevelMeter.peak(of: buffer))
         }
@@ -47,7 +41,7 @@ public struct WaveformPeaks: Sendable {
         let data = try Data(contentsOf: url)
         let count = data.count / MemoryLayout<Float>.size
         let magnitudes = data.withUnsafeBytes { raw in
-            Array(raw.bindMemory(to: Float.self).prefix(count))
+            Array(raw.bindMemory(to: Float.self))
         }
         return WaveformPeaks(magnitudes: magnitudes)
     }
