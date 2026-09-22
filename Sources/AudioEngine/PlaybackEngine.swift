@@ -23,24 +23,30 @@ public final class PlaybackEngine {
         engine.connect(sampler, to: engine.mainMixerNode, format: nil)
         engine.attach(audioPlayerNode)
         engine.connect(audioPlayerNode, to: engine.mainMixerNode, format: nil)
-        // Capture the lock directly, not `self` — this closure runs on a
-        // real-time audio thread, never the main thread. `PlaybackEngine` is
-        // `@MainActor`, so touching *any* of its properties via `self` here
-        // requires main-actor isolation the audio thread doesn't have; the
-        // compiler doesn't catch this (the `@preconcurrency import
-        // AVFoundation` above suppresses that diagnostic), so it only
-        // surfaces as a runtime "data race detected" trap when the tap
-        // actually fires. `OSAllocatedUnfairLock` is genuinely `Sendable`
-        // on its own, so capturing it directly sidesteps the actor-isolation
-        // check instead of working around it.
-        let currentOutputLevel = currentOutputLevel
-        audioPlayerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
-            currentOutputLevel.withLock { $0 = AudioLevelMeter.peak(of: buffer) }
-        }
+        Self.installLevelTap(on: audioPlayerNode, level: currentOutputLevel)
     }
 
     public var level: Float {
         currentOutputLevel.withLock { $0 }
+    }
+
+    /// Installs the tap outside `init()`'s `@MainActor` isolation on purpose.
+    /// A closure formed lexically inside a `@MainActor` method inherits that
+    /// isolation by default — regardless of whether its body ever touches
+    /// `self` — and the compiler doesn't flag the mismatch (the
+    /// `@preconcurrency import AVFoundation` above suppresses that
+    /// diagnostic). But the tap callback always runs on a real-time audio
+    /// thread, never the main thread, so a `@MainActor`-inferred closure
+    /// traps at runtime ("data race detected") the moment it actually fires
+    /// — which nothing in this project exercised until real hardware ran it.
+    /// A `nonisolated` function breaks the inheritance chain: a closure
+    /// formed inside one does not pick up the caller's actor isolation.
+    /// `node`/`level` are passed as plain parameters rather than read via
+    /// `self` so this method has no dependency on `self` at all.
+    nonisolated private static func installLevelTap(on node: AVAudioPlayerNode, level: OSAllocatedUnfairLock<Float>) {
+        node.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
+            level.withLock { $0 = AudioLevelMeter.peak(of: buffer) }
+        }
     }
 
     public func start() throws {
