@@ -17,3 +17,6 @@ DerivedData/
 
 # Local git worktrees used for isolated feature work
 .worktrees/
+
+# Visual brainstorming companion session data
+.superpowers/
