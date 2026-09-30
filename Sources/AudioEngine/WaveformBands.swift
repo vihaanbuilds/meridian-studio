@@ -43,6 +43,10 @@ public struct WaveformBands: Sendable {
 
         // Bin `i` (0..<n/2) covers frequency `i * sampleRate / n`.
         let binHz = sampleRate / Float(n)
+        // Use ceil() to set conservative (inclusive) bin boundaries. At standard rates
+        // (44.1kHz, 48kHz), this properly contains spectral leakage (e.g., a 100Hz tone
+        // doesn't bleed into mid band). At high rates like 192kHz, ceil() avoids the
+        // degenerate case where Int() truncation would make lowCutoffBin = 0.
         let lowCutoffBin = Int(ceil(250 / binHz))
         let midCutoffBin = Int(ceil(2000 / binHz))
 
