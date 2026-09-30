@@ -61,7 +61,7 @@ extension AppState {
         do {
             try FileManager.default.moveItem(at: workingURL, to: finalURL)
             document.addAudioRegion(region, toTrackAt: selectedTrackIndex)
-            _ = waveformPeaks(for: region)
+            _ = waveformBands(for: region)
         } catch {
             presentError(error)
         }

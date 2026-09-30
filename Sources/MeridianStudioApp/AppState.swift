@@ -37,19 +37,19 @@ final class AppState: ObservableObject {
     /// naturally as 0 when nothing is scheduled — the tap receives silence.
     @Published private(set) var outputLevel: Float = 0
 
-    /// Cached waveform peaks for audio regions, keyed by
-    /// `AudioRegion.fileName`. Populated by `waveformPeaks(for:)` in
+    /// Cached waveform bands for audio regions, keyed by
+    /// `AudioRegion.fileName`. Populated by `waveformBands(for:)` in
     /// `AppState+Waveforms.swift`, off the main thread — `@Published` so
     /// `TimelineView` redraws once a load completes. Not `private`: both
     /// this file and `AppState+Waveforms.swift` read and write it.
-    @Published var waveformCache: [String: WaveformPeaks] = [:]
+    @Published var bandCache: [String: WaveformBands] = [:]
     /// Dedupes concurrent loads for the same file. Never cleared on
     /// failure — see `AppState+Waveforms.swift` for why that's
     /// intentional (at most one analysis attempt per file per session).
-    /// Deliberately NOT `@Published`, unlike `waveformCache`: it's mutated
+    /// Deliberately NOT `@Published`, unlike `bandCache`: it's mutated
     /// from inside `TimelineView.body` during a SwiftUI render pass, and
     /// publishing from there would risk a re-render loop.
-    var waveformLoadsInFlight: Set<String> = []
+    var bandLoadsInFlight: Set<String> = []
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately

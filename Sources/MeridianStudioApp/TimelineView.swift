@@ -49,8 +49,8 @@ struct TimelineView: View {
                                 .fill(Color.orange.opacity(0.6))
                                 .frame(width: CGFloat(region.lengthBeats) * pixelsPerBeat, height: laneHeight)
                                 .overlay {
-                                    if let peaks = appState.waveformPeaks(for: region) {
-                                        WaveformView(peaks: peaks)
+                                    if let bands = appState.waveformBands(for: region) {
+                                        WaveformView(bands: bands)
                                     }
                                 }
                                 .overlay(alignment: .topLeading) {
