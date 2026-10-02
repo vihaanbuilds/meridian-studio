@@ -26,6 +26,31 @@ final class WaveformBandsTests: XCTestCase {
         return url
     }
 
+    /// Writes `segments` back-to-back into one continuous file — each one
+    /// a clean tone at its own frequency/amplitude/length. `analyze` reads
+    /// in fixed `samplesPerBucket`-frame chunks regardless of how the file
+    /// was written, so N full-bucket-sized segments produce N buckets,
+    /// letting a test exercise more than one bucket (and, with a shorter
+    /// final segment, a trailing zero-padded one).
+    private func makeMultiToneFile(
+        segments: [(frequency: Float, amplitude: Float, frameCount: Int)],
+        sampleRate: Double = 44100
+    ) throws -> URL {
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        for segment in segments {
+            let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(segment.frameCount))!
+            buffer.frameLength = AVAudioFrameCount(segment.frameCount)
+            for frame in 0..<segment.frameCount {
+                let sample = Float(sin(2 * Double.pi * Double(segment.frequency) * Double(frame) / sampleRate)) * segment.amplitude
+                buffer.floatChannelData![0][frame] = sample
+            }
+            try file.write(from: buffer)
+        }
+        return url
+    }
+
     func testLowToneDominatesLowBand() throws {
         let url = try makeToneFile(frequency: 100, frameCount: Int(WaveformBands.samplesPerBucket))
         defer { try? FileManager.default.removeItem(at: url) }
@@ -60,6 +85,10 @@ final class WaveformBandsTests: XCTestCase {
         XCTAssertLessThan(bands.mid[0], 0.4)
     }
 
+    /// Uses identical content on both channels, so this only exercises the
+    /// no-crash/consistent-with-mono path, not true out-of-phase channel
+    /// cancellation (e.g. hard-panned or anti-phase stereo content), which
+    /// would partially cancel under the averaging downmix.
     func testStereoInputDoesNotCrashAndDownmixesConsistently() throws {
         let url = try makeToneFile(frequency: 1000, frameCount: Int(WaveformBands.samplesPerBucket), channels: 2)
         defer { try? FileManager.default.removeItem(at: url) }
@@ -110,6 +139,44 @@ final class WaveformBandsTests: XCTestCase {
         XCTAssertEqual(bands.high[0], 1.0, accuracy: 0.0001)
         XCTAssertLessThan(bands.low[0], 0.4)
         XCTAssertLessThan(bands.mid[0], 0.4)
+    }
+
+    func testMultipleBucketsAreAnalyzedInOrderAndNormalizedAcrossTheWholeFile() throws {
+        let bucket = Int(WaveformBands.samplesPerBucket)
+        // Strictly decreasing amplitudes (0.8 / 0.4 / 0.2) so bucket 0 is
+        // unambiguously the loudest instant in the file regardless of
+        // minor per-frequency FFT variance, directly exercising the "one
+        // shared normalizer across every bucket in the file" rule — with
+        // only one bucket (every other test here), that rule is trivially
+        // satisfied and untested.
+        let url = try makeMultiToneFile(segments: [
+            (frequency: 100, amplitude: 0.8, frameCount: bucket),
+            (frequency: 1000, amplitude: 0.4, frameCount: bucket),
+            (frequency: 8000, amplitude: 0.2, frameCount: 200)
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let bands = try WaveformBands.analyze(fileURL: url)
+
+        XCTAssertEqual(bands.low.count, 3)
+        XCTAssertEqual(bands.mid.count, 3)
+        XCTAssertEqual(bands.high.count, 3)
+
+        // Bucket 0: full-amplitude 100Hz is the file's loudest instant.
+        XCTAssertGreaterThan(bands.low[0], bands.mid[0])
+        XCTAssertGreaterThan(bands.low[0], bands.high[0])
+        XCTAssertEqual(bands.low[0], 1.0, accuracy: 0.0001)
+
+        // Bucket 1: 1000Hz dominates mid, at roughly half bucket 0's peak
+        // (amplitude 0.4 vs. 0.8) — this is the normalization check.
+        XCTAssertGreaterThan(bands.mid[1], bands.low[1])
+        XCTAssertGreaterThan(bands.mid[1], bands.high[1])
+        XCTAssertEqual(bands.mid[1], 0.5, accuracy: 0.05)
+
+        // Bucket 2: a short, zero-padded 8kHz tail still reads as
+        // high-dominant despite the truncation.
+        XCTAssertGreaterThan(bands.high[2], bands.low[2])
+        XCTAssertGreaterThan(bands.high[2], bands.mid[2])
     }
 
     func testWriteAndReadRoundTrip() throws {

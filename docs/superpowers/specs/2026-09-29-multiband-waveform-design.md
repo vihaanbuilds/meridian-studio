@@ -241,11 +241,16 @@ implicitly the same way `AVFoundation` already is elsewhere in
 
 **Bin math at 44.1kHz** (illustrative — the actual cutoffs are computed
 per-file from the real sample rate, not hardcoded): 512 samples ≈
-86.1Hz/bin, so <250Hz is bins 0–1, 250Hz–2kHz is bins 2–22, >2kHz is
-bins 23–255. Deliberately coarse at the low end (bass energy is
-concentrated in very few bins at this resolution) and wide at the high
-end — matches how energy is actually distributed in typical program
-material, not an attempt at scientific precision.
+86.1Hz/bin, so <250Hz is bins 0–2, 250Hz–2kHz is bins 3–23, >2kHz is
+bins 24–255. (The implementation rounds cutoffs up with `ceil` rather
+than truncating, caught during Task 1's implementation when truncation
+let a 100Hz tone's spectral leakage bleed into the mid band, and
+truncation also degenerates to an empty low band entirely at high
+sample rates like 192kHz — see `Sources/AudioEngine/WaveformBands.swift`
+for the real cutoff calculation.) Deliberately coarse at the low end
+(bass energy is concentrated in very few bins at this resolution) and
+wide at the high end — matches how energy is actually distributed in
+typical program material, not an attempt at scientific precision.
 
 ## 3. Generation & Caching
 

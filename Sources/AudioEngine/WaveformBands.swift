@@ -11,9 +11,12 @@ import AVFoundation
 public struct WaveformBands: Sendable {
     public static let samplesPerBucket: AVAudioFrameCount = 512
 
-    /// <250Hz — kick/bass fundamentals.
+    /// <250Hz — kick/bass fundamentals. The boundary is approximate: it
+    /// rounds up to the nearest FFT bin (`ceil`, see `analyze`), which can
+    /// sit up to one `binHz` (~86Hz at 44.1kHz) above 250Hz.
     public let low: [Float]
-    /// 250Hz–2kHz — vocals, guitars, most harmonic content.
+    /// 250Hz–2kHz — vocals, guitars, most harmonic content. Same
+    /// bin-rounding caveat as `low`.
     public let mid: [Float]
     /// >2kHz — cymbals, air, transient detail.
     public let high: [Float]
@@ -144,9 +147,9 @@ public struct WaveformBands: Sendable {
     }
 
     /// Interleaved `Float32` triples (low, mid, high) per bucket — no
-    /// header, no version field, same regenerable-cache convention as
-    /// `WaveformPeaks`. Written at `.bandpeaks`, never `.peaks`: an old
-    /// `.peaks` file (one float/bucket) would misparse under this
+    /// header, no version field, same regenerable-cache convention the
+    /// retired single-band `.peaks` cache used. Written at `.bandpeaks`,
+    /// never `.peaks`: an old `.peaks` file (one float/bucket) would misparse under this
     /// three-floats/bucket layout with no way to detect the mismatch, so
     /// this uses a distinct extension rather than reinterpreting old cache
     /// files. Old `.peaks` files are simply orphaned — matches this

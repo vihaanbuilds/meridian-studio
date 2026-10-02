@@ -55,8 +55,24 @@ heard. Every audio track this way holds exactly one region, which keeps
 that existing behavior correct. Playing multiple regions on one track
 together is real, unscoped future work.
 
+## Waveform rendering
+Later Phase 3 milestones added an actual visual of each `AudioRegion`'s
+shape in the timeline, not just the live level meter above. First,
+`WaveformPeaks` drew one combined time-domain peak per 512-sample bucket
+(see `docs/superpowers/specs/2026-09-21-waveform-rendering-design.md`).
+That was then replaced outright by `WaveformBands`
+(`Sources/AudioEngine/WaveformBands.swift`), which computes three
+FFT-derived frequency-band energies per bucket — low/bass, mid/vocals,
+high/cymbals — rendered as three overlaid colored traces instead of one
+(see `docs/superpowers/specs/2026-09-29-multiband-waveform-design.md`).
+Both are offline-only (computed after a take is recorded or a file is
+imported, with lazy backfill for older regions), cached next to the
+audio file (`.bandpeaks`, superseding the earlier `.peaks` format), and
+Meridian Studio-only — Companion has no per-region waveform view.
+
 ## Non-goals of this milestone
-No waveform rendering (a real visual of the recorded shape, not just a
-level meter), no trim/split/fade/normalize, no per-track gain/pan, and
-no glitch-proof capture under load — all deferred to later Phase 3
-milestones or Phase 4's mixer.
+No trim/split/fade/normalize, no per-track gain/pan, and no
+glitch-proof capture under load — all deferred to later Phase 3
+milestones or Phase 4's mixer. (Waveform rendering was a non-goal of
+*this* milestone specifically but has since shipped — see "Waveform
+rendering" above.)
