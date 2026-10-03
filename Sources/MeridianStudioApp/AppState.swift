@@ -340,4 +340,12 @@ final class AppState: ObservableObject {
         // unrecoverable, since neither updateNote nor quantizeNotes is undo-registered.
         document.quantizeNotes(gridBeats: quantizeGridBeats, strength: quantizeStrength, maxStartBeat: PianoRollView.canvasBeats, inTrackAt: selectedTrackIndex)
     }
+
+    /// Splits the audio region with `id` on the track at `trackIndex` — the
+    /// region's *actual* track, supplied explicitly by the caller
+    /// (`TimelineView` renders every track at once, unlike `PianoRollView`,
+    /// so this can't default to `selectedTrackIndex` the way note edits do).
+    func splitAudioRegion(id: UUID, atBeat beat: Double, inTrackAt trackIndex: Int) {
+        document.splitAudioRegion(id: id, atBeat: beat, tempo: document.project.tempo, inTrackAt: trackIndex)
+    }
 }

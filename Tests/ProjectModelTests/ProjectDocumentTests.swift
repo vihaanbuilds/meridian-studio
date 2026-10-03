@@ -278,4 +278,56 @@ final class ProjectDocumentTests: XCTestCase {
         XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 1)
         XCTAssertEqual(doc.project.tracks[0].audioRegions[0].fileName, "take1.wav")
     }
+
+    func testSplitAudioRegionProducesTwoCorrectlyRangedHalves() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        doc.splitAudioRegion(id: region.id, atBeat: 1, tempo: 120, inTrackAt: 0)
+
+        let regions = doc.project.tracks[0].audioRegions
+        XCTAssertEqual(regions.count, 2)
+        XCTAssertEqual(regions[0].startBeat, 0)
+        XCTAssertEqual(regions[0].lengthBeats, 1)
+        XCTAssertEqual(regions[0].sourceOffsetSeconds, 0)
+        XCTAssertEqual(regions[0].fileName, "take1.wav")
+        XCTAssertEqual(regions[1].startBeat, 1)
+        XCTAssertEqual(regions[1].lengthBeats, 3)
+        XCTAssertEqual(regions[1].sourceOffsetSeconds, 0.5, accuracy: 0.0001)  // 1 beat at 120bpm = 0.5s
+        XCTAssertEqual(regions[1].fileName, "take1.wav")
+    }
+
+    func testSplitAudioRegionAtOrBeyondEitherEdgeIsNoOp() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        doc.splitAudioRegion(id: region.id, atBeat: 0, tempo: 120, inTrackAt: 0)   // at the start edge
+        doc.splitAudioRegion(id: region.id, atBeat: 4, tempo: 120, inTrackAt: 0)   // at the end edge
+        doc.splitAudioRegion(id: region.id, atBeat: 10, tempo: 120, inTrackAt: 0)  // beyond the end
+
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 1)
+    }
+
+    func testUndoSplitAudioRegionRestoresOriginalInOneStep() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        doc.splitAudioRegion(id: region.id, atBeat: 1, tempo: 120, inTrackAt: 0)
+        doc.undoManager.undo()
+
+        let regions = doc.project.tracks[0].audioRegions
+        XCTAssertEqual(regions.count, 1)
+        XCTAssertEqual(regions[0], region)
+    }
+
+    func testRedoSplitAudioRegionReSplitsInOneStep() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        doc.splitAudioRegion(id: region.id, atBeat: 1, tempo: 120, inTrackAt: 0)
+        doc.undoManager.undo()
+        doc.undoManager.redo()
+
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 2)
+    }
 }

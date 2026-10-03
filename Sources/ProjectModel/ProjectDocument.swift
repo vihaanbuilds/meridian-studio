@@ -56,6 +56,59 @@ public final class ProjectDocument: ObservableObject {
         }
     }
 
+    /// Splits the region with `id` into two at `splitBeat`. A no-op if
+    /// `splitBeat` doesn't fall strictly inside the region (e.g. a
+    /// double-click landed exactly on or past an edge) — never produces a
+    /// degenerate zero-length half. Both halves reference the same
+    /// `fileName`; no audio file is read, copied, or written. Registered as
+    /// a single undo step via `mergeAudioRegions`'s mutual re-registration
+    /// (the same idiom `addAudioRegion`/`removeAudioRegion` already use for
+    /// their own undo/redo symmetry) — not composed from three chained
+    /// `removeAudioRegion`/`addAudioRegion` calls, which would register
+    /// three separate undo steps instead of one.
+    public func splitAudioRegion(id: UUID, atBeat splitBeat: Double, tempo: Double, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == id }) else { return }
+        let original = project.tracks[trackIndex].audioRegions[index]
+        guard splitBeat > original.startBeat, splitBeat < original.startBeat + original.lengthBeats else { return }
+
+        let firstLengthBeats = splitBeat - original.startBeat
+        let elapsedSeconds = Tempo.seconds(forBeats: firstLengthBeats, tempo: tempo)
+        let first = AudioRegion(
+            startBeat: original.startBeat, lengthBeats: firstLengthBeats,
+            fileName: original.fileName, sourceOffsetSeconds: original.sourceOffsetSeconds
+        )
+        let second = AudioRegion(
+            startBeat: splitBeat, lengthBeats: original.lengthBeats - firstLengthBeats,
+            fileName: original.fileName, sourceOffsetSeconds: original.sourceOffsetSeconds + elapsedSeconds
+        )
+
+        project.tracks[trackIndex].audioRegions.remove(at: index)
+        project.tracks[trackIndex].audioRegions.append(first)
+        project.tracks[trackIndex].audioRegions.append(second)
+
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.mergeAudioRegions(first.id, second.id, into: original, splitBeat: splitBeat, tempo: tempo, inTrackAt: trackIndex)
+            }
+        }
+    }
+
+    /// The inverse of `splitAudioRegion` — removes both halves, restores
+    /// `original`, and registers undo for *this* operation as a call back
+    /// into `splitAudioRegion` at the same point, so redo re-splits.
+    private func mergeAudioRegions(_ firstID: UUID, _ secondID: UUID, into original: AudioRegion, splitBeat: Double, tempo: Double, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        project.tracks[trackIndex].audioRegions.removeAll { $0.id == firstID || $0.id == secondID }
+        project.tracks[trackIndex].audioRegions.append(original)
+
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.splitAudioRegion(id: original.id, atBeat: splitBeat, tempo: tempo, inTrackAt: trackIndex)
+            }
+        }
+    }
+
     public func addTrack(_ track: Track) {
         project.tracks.append(track)
         let insertedID = track.id
