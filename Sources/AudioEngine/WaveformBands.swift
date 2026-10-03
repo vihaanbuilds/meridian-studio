@@ -146,6 +146,19 @@ public struct WaveformBands: Sendable {
         )
     }
 
+    /// Returns the sub-range of buckets covering `fromSeconds..<toSeconds` of
+    /// the original file this `WaveformBands` was analyzed from. Used to show
+    /// only a trimmed/split region's actual played range, not the whole
+    /// file's waveform. Bucket boundaries, not sample-accurate — a visual
+    /// waveform doesn't need to be.
+    public func slice(fromSeconds: Double, toSeconds: Double, sampleRate: Double) -> WaveformBands {
+        let bucketSeconds = Double(Self.samplesPerBucket) / sampleRate
+        let startBucket = max(0, Int((fromSeconds / bucketSeconds).rounded(.down)))
+        let endBucket = min(low.count, Int((toSeconds / bucketSeconds).rounded(.up)))
+        guard startBucket < endBucket else { return WaveformBands(low: [], mid: [], high: []) }
+        return WaveformBands(low: Array(low[startBucket..<endBucket]), mid: Array(mid[startBucket..<endBucket]), high: Array(high[startBucket..<endBucket]))
+    }
+
     /// Interleaved `Float32` triples (low, mid, high) per bucket — no
     /// header, no version field, same regenerable-cache convention the
     /// retired single-band `.peaks` cache used. Written at `.bandpeaks`,

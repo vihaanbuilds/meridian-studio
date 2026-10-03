@@ -50,6 +50,13 @@ final class AppState: ObservableObject {
     /// from inside `TimelineView.body` during a SwiftUI render pass, and
     /// publishing from there would risk a re-render loop.
     var bandLoadsInFlight: Set<String> = []
+    /// Each file's sample rate and total duration, keyed by `AudioRegion
+    /// .fileName`, populated alongside `bandCache` in `AppState+Waveforms
+    /// .swift` — needed to slice a trimmed/split region's waveform
+    /// (`sampleRateCache`) and to clamp a trailing trim-handle drag to what
+    /// the file actually has left (`fileDurationSecondsCache`).
+    @Published var sampleRateCache: [String: Double] = [:]
+    @Published var fileDurationSecondsCache: [String: Double] = [:]
 
     /// Pitches currently held on the MIDI keyboard, mapped to the wall-clock
     /// `Date` they were pressed. This is a *live visual cue only* — deliberately

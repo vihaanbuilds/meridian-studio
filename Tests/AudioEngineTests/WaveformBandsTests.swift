@@ -203,4 +203,37 @@ final class WaveformBandsTests: XCTestCase {
         XCTAssertTrue(bands.mid.isEmpty)
         XCTAssertTrue(bands.high.isEmpty)
     }
+
+    func testSliceReturnsTheSubRangeOfBucketsForTheGivenSeconds() {
+        // 4 buckets, 512 samples each, at 44100Hz: ~11.6ms/bucket.
+        let bands = WaveformBands(low: [0, 1, 2, 3], mid: [10, 11, 12, 13], high: [20, 21, 22, 23])
+        let bucketSeconds = Double(WaveformBands.samplesPerBucket) / 44100
+
+        let sliced = bands.slice(fromSeconds: bucketSeconds, toSeconds: bucketSeconds * 3, sampleRate: 44100)
+
+        XCTAssertEqual(sliced.low, [1, 2])
+        XCTAssertEqual(sliced.mid, [11, 12])
+        XCTAssertEqual(sliced.high, [21, 22])
+    }
+
+    func testSliceClampsToTheWholeFileWhenGivenTheFullRange() {
+        let bands = WaveformBands(low: [0, 1, 2, 3], mid: [10, 11, 12, 13], high: [20, 21, 22, 23])
+        let bucketSeconds = Double(WaveformBands.samplesPerBucket) / 44100
+
+        let sliced = bands.slice(fromSeconds: 0, toSeconds: bucketSeconds * 4, sampleRate: 44100)
+
+        XCTAssertEqual(sliced.low, bands.low)
+        XCTAssertEqual(sliced.mid, bands.mid)
+        XCTAssertEqual(sliced.high, bands.high)
+    }
+
+    func testSliceOfDegenerateRangeReturnsEmptyBands() {
+        let bands = WaveformBands(low: [0, 1, 2, 3], mid: [10, 11, 12, 13], high: [20, 21, 22, 23])
+
+        let sliced = bands.slice(fromSeconds: 1, toSeconds: 1, sampleRate: 44100)
+
+        XCTAssertTrue(sliced.low.isEmpty)
+        XCTAssertTrue(sliced.mid.isEmpty)
+        XCTAssertTrue(sliced.high.isEmpty)
+    }
 }

@@ -1,5 +1,6 @@
 // Sources/MeridianStudioApp/AppState+Waveforms.swift
 import AudioEngine
+import AVFoundation
 import Foundation
 import ProjectModel
 
@@ -24,7 +25,18 @@ extension AppState {
                 ?? (try? WaveformBands.analyze(fileURL: audioFileURL))
             guard let bands else { return }
             try? bands.write(to: bandsFileURL)
-            await MainActor.run { self.bandCache[region.fileName] = bands }
+            // One extra cheap AVAudioFile header read (not a full re-analysis),
+            // whether `bands` came from the cache or a fresh analyze — needed
+            // for waveform slicing and the trim-handle clamp, neither of which
+            // the `.bandpeaks` cache file itself stores.
+            let file = try? AVAudioFile(forReading: audioFileURL)
+            let sampleRate = file?.processingFormat.sampleRate
+            let durationSeconds = file.map { Double($0.length) / $0.processingFormat.sampleRate }
+            await MainActor.run {
+                self.bandCache[region.fileName] = bands
+                if let sampleRate { self.sampleRateCache[region.fileName] = sampleRate }
+                if let durationSeconds { self.fileDurationSecondsCache[region.fileName] = durationSeconds }
+            }
         }
         return nil
     }
