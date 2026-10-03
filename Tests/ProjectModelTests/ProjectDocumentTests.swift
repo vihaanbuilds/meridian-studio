@@ -420,12 +420,27 @@ final class ProjectDocumentTests: XCTestCase {
         let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
         let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
 
+        // UndoManager.groupsByEvent's automatic per-event grouping only closes a
+        // group on a real run-loop turn, which a synchronous test never gets —
+        // without this, two separate top-level calls below would incorrectly
+        // merge into one undo group. This only affects the two *initial* calls
+        // made directly from this test; undo()/redo() already brackets a
+        // registered handler's own re-invocation in its own group regardless of
+        // this flag, so the mutual-reregistration idiom under test needs no
+        // production-code change — this is a test-only accommodation, scoped to
+        // this test's own UndoManager instance.
+        doc.undoManager.groupsByEvent = false
+
         var trimmed = region
         trimmed.lengthBeats = 3
         doc.updateAudioRegion(trimmed, inTrackAt: 0)
+        doc.undoManager.beginUndoGrouping()
         doc.commitAudioRegionEdit(from: region, inTrackAt: 0)
+        doc.undoManager.endUndoGrouping()
 
+        doc.undoManager.beginUndoGrouping()
         doc.splitAudioRegion(id: region.id, atBeat: 1, tempo: 120, inTrackAt: 0)
+        doc.undoManager.endUndoGrouping()
         XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 2)
 
         doc.undoManager.undo()
