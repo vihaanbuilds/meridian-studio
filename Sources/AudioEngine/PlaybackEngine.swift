@@ -61,10 +61,11 @@ public final class PlaybackEngine {
     /// Wall-clock scheduling via `Task.sleep` for MIDI notes (not sample-accurate
     /// `AVAudioTime` scheduling — acceptable for Phase 1's "audible and roughly
     /// in sync" bar; see docs/midi.md). Audio regions DO use `AVAudioTime`
-    /// scheduling via `scheduleFile`, since `AVAudioPlayerNode` wants it and it
-    /// costs nothing extra here. `audioRegions` are plain `(url, startBeat)`
-    /// pairs, not `AudioRegion` values — this module never resolves filenames
-    /// into project-bundle paths, the app layer does that before calling.
+    /// scheduling via `scheduleSegment`, since `AVAudioPlayerNode` wants it and
+    /// it costs nothing extra here. `audioRegions` are plain
+    /// `(url, startBeat, sourceOffsetSeconds, lengthBeats)` tuples, not
+    /// `AudioRegion` values — this module never resolves filenames into
+    /// project-bundle paths, the app layer does that before calling.
     public func play(regions: [MIDIRegion], audioRegions: [(url: URL, startBeat: Double, sourceOffsetSeconds: Double, lengthBeats: Double)], tempo: Double) {
         // A second Play press must not stack on top of an unstopped previous one.
         // Called once here, not once per region — calling it per region would

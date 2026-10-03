@@ -267,7 +267,7 @@ final class CompanionState: ObservableObject {
             case .audio:
                 guard let region = track.audioRegions.first else { return }
                 let url = last.id.appendingPathComponent("audio").appendingPathComponent(region.fileName)
-                playbackEngine.play(regions: [], audioRegions: [(url: url, startBeat: region.startBeat)], tempo: project.tempo)
+                playbackEngine.play(regions: [], audioRegions: [(url: url, startBeat: region.startBeat, sourceOffsetSeconds: region.sourceOffsetSeconds, lengthBeats: region.lengthBeats)], tempo: project.tempo)
             }
         } catch {
             lastError = error.localizedDescription
