@@ -348,4 +348,23 @@ final class AppState: ObservableObject {
     func splitAudioRegion(id: UUID, atBeat beat: Double, inTrackAt trackIndex: Int) {
         document.splitAudioRegion(id: id, atBeat: beat, tempo: document.project.tempo, inTrackAt: trackIndex)
     }
+
+    /// Audio-region equivalents of `splitAudioRegion`'s trackIndex handling —
+    /// explicit, not `selectedTrackIndex`, since `TimelineView` renders every
+    /// track's regions at once.
+    func updateAudioRegion(_ region: AudioRegion, inTrackAt trackIndex: Int) {
+        document.updateAudioRegion(region, inTrackAt: trackIndex)
+    }
+
+    func commitAudioRegionEdit(from original: AudioRegion, inTrackAt trackIndex: Int) {
+        document.commitAudioRegionEdit(from: original, inTrackAt: trackIndex)
+    }
+
+    /// Unlike the audio-region wrappers above, this one *does* use
+    /// `selectedTrackIndex` — matching `moveOrResizeSelectedNote`'s existing
+    /// pattern, since `PianoRollView` only ever shows one track's notes at a
+    /// time (`selectedTrackIndex`'s track), unlike `TimelineView`.
+    func commitNoteEdit(from original: NoteEvent) {
+        document.commitNoteEdit(from: original, inTrackAt: selectedTrackIndex)
+    }
 }

@@ -109,6 +109,30 @@ public final class ProjectDocument: ObservableObject {
         }
     }
 
+    /// Live setter for the drag in progress — no undo registration, same
+    /// reasoning as `updateNote`. Called on every `onChanged` frame.
+    public func updateAudioRegion(_ region: AudioRegion, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == region.id }) else { return }
+        project.tracks[trackIndex].audioRegions[index] = region
+    }
+
+    /// Called once, at drag-end, with the region's value captured when the
+    /// drag started. Registers one undo step for the whole gesture, mirroring
+    /// `commitNoteEdit`.
+    public func commitAudioRegionEdit(from original: AudioRegion, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == original.id }) else { return }
+        let current = project.tracks[trackIndex].audioRegions[index]
+        guard current != original else { return }
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.updateAudioRegion(original, inTrackAt: trackIndex)
+                doc.commitAudioRegionEdit(from: current, inTrackAt: trackIndex)
+            }
+        }
+    }
+
     public func addTrack(_ track: Track) {
         project.tracks.append(track)
         let insertedID = track.id
@@ -145,6 +169,27 @@ public final class ProjectDocument: ObservableObject {
         guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
         guard let noteIndex = project.tracks[trackIndex].regions[regionIndex].notes.firstIndex(where: { $0.id == note.id }) else { return }
         project.tracks[trackIndex].regions[regionIndex].notes[noteIndex] = note
+    }
+
+    /// Called once, at drag-end, with the note's value captured when the
+    /// drag started. Registers one undo step for the whole gesture —
+    /// restoring `original` via the same mutual-re-registration idiom
+    /// `addRegion`/`removeRegion` already use, so redo works symmetrically.
+    /// `updateNote` itself stays undo-free on purpose: it's called on every
+    /// `onChanged` frame during a drag, and registering undo there would
+    /// turn one drag gesture into dozens of undo steps.
+    public func commitNoteEdit(from original: NoteEvent, inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
+        guard let noteIndex = project.tracks[trackIndex].regions[regionIndex].notes.firstIndex(where: { $0.id == original.id }) else { return }
+        let current = project.tracks[trackIndex].regions[regionIndex].notes[noteIndex]
+        guard current != original else { return }
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                doc.updateNote(original, inTrackAt: trackIndex)
+                doc.commitNoteEdit(from: current, inTrackAt: trackIndex)
+            }
+        }
     }
 
     public func deleteNotes(ids: Set<UUID>, inTrackAt trackIndex: Int) {

@@ -330,4 +330,109 @@ final class ProjectDocumentTests: XCTestCase {
 
         XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 2)
     }
+
+    func testUpdateAudioRegionChangesFieldsWithNoUndoRegistered() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        var updated = region
+        updated.lengthBeats = 2
+        doc.updateAudioRegion(updated, inTrackAt: 0)
+
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].lengthBeats, 2)
+        XCTAssertFalse(doc.undoManager.canUndo)
+    }
+
+    func testCommitAudioRegionEditRegistersNoUndoWhenUnchanged() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        doc.commitAudioRegionEdit(from: region, inTrackAt: 0)
+
+        XCTAssertFalse(doc.undoManager.canUndo)
+    }
+
+    func testCommitAudioRegionEditRegistersOneUndoStepForTheWholeGesture() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        // Simulate several onChanged frames during one drag, then one commit
+        // with the pre-drag value — matches how TimelineView will call this.
+        var updated = region
+        updated.lengthBeats = 3
+        doc.updateAudioRegion(updated, inTrackAt: 0)
+        updated.lengthBeats = 2
+        doc.updateAudioRegion(updated, inTrackAt: 0)
+        doc.commitAudioRegionEdit(from: region, inTrackAt: 0)
+
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].lengthBeats, 2)
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].lengthBeats, 4, "one undo should restore the pre-drag value, regardless of how many onChanged frames happened in between")
+    }
+
+    func testRedoAudioRegionEditReappliesChange() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        var updated = region
+        updated.lengthBeats = 2
+        doc.updateAudioRegion(updated, inTrackAt: 0)
+        doc.commitAudioRegionEdit(from: region, inTrackAt: 0)
+        doc.undoManager.undo()
+        doc.undoManager.redo()
+
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].lengthBeats, 2)
+    }
+
+    func testCommitNoteEditRegistersNoUndoWhenUnchanged() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.commitNoteEdit(from: note, inTrackAt: 0)
+
+        XCTAssertFalse(doc.undoManager.canUndo)
+    }
+
+    func testCommitNoteEditRegistersOneUndoStepAndRedoes() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        var updated = note
+        updated.pitch = 64
+        doc.updateNote(updated, inTrackAt: 0)
+        doc.commitNoteEdit(from: note, inTrackAt: 0)
+
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].pitch, 64)
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].pitch, 60)
+        doc.undoManager.redo()
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].pitch, 64)
+    }
+
+    // Review Focus: sequential edits of different kinds must each undo
+    // independently, in reverse order, not merge into one step. This also
+    // serves as an empirical check of UndoManager's grouping behavior in a
+    // synchronous test run — if it fails, the likely fix is wrapping each
+    // commit/split in explicit beginUndoGrouping()/endUndoGrouping().
+    func testSequentialTrimThenSplitEachUndoIndependently() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+
+        var trimmed = region
+        trimmed.lengthBeats = 3
+        doc.updateAudioRegion(trimmed, inTrackAt: 0)
+        doc.commitAudioRegionEdit(from: region, inTrackAt: 0)
+
+        doc.splitAudioRegion(id: region.id, atBeat: 1, tempo: 120, inTrackAt: 0)
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 2)
+
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 1)
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].lengthBeats, 3, "undoing the split must not also undo the earlier trim")
+
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks[0].audioRegions[0].lengthBeats, 4)
+    }
 }

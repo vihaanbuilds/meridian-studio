@@ -155,6 +155,7 @@ struct PianoRollView: View {
                 appState.moveOrResizeSelectedNote(to: updated)
             }
             .onEnded { _ in
+                if let dragStartNote { appState.commitNoteEdit(from: dragStartNote) }
                 dragStartNote = nil
             }
     }
@@ -172,6 +173,7 @@ struct PianoRollView: View {
                 appState.moveOrResizeSelectedNote(to: updated)
             }
             .onEnded { _ in
+                if let dragStartNote { appState.commitNoteEdit(from: dragStartNote) }
                 dragStartNote = nil
             }
     }
