@@ -222,7 +222,7 @@ final class AppState: ObservableObject {
         let midiEndBeat = regions.map { region in
             max(region.notes.map { $0.startBeat + $0.lengthBeats }.max() ?? 0, region.lengthBeats)
         }.max() ?? 0
-        let audioEndBeat = audibleTracks.compactMap(\.audioRegions.last).map { $0.startBeat + $0.lengthBeats }.max() ?? 0
+        let audioEndBeat = audibleTracks.flatMap(\.audioRegions).map { $0.startBeat + $0.lengthBeats }.max() ?? 0
         let endBeat = max(midiEndBeat, audioEndBeat)
         let durationSeconds = Tempo.seconds(forBeats: max(endBeat, 0), tempo: tempo)
         playbackCompletionTask = Task { @MainActor [weak self] in
@@ -235,17 +235,20 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Resolves each audible track's most recent audio region's filename against
-    /// the project bundle's `audio/` directory. Requires `fileURL` — an audio
-    /// track can only ever have a recorded region if the project was already
-    /// saved (see `AppState+AudioRecording.swift`), so this never silently drops
-    /// audio due to a nil `fileURL` in practice.
-    private func resolveAudioRegions(in tracks: [Track]) -> [(url: URL, startBeat: Double)] {
+    /// Resolves every audible track's audio regions' filenames against the
+    /// project bundle's `audio/` directory — every region on a track, not
+    /// just the most recent (a track can hold more than one after a split).
+    /// Requires `fileURL` — an audio track can only ever have a recorded
+    /// region if the project was already saved (see
+    /// `AppState+AudioRecording.swift`), so this never silently drops audio
+    /// due to a nil `fileURL` in practice.
+    private func resolveAudioRegions(in tracks: [Track]) -> [(url: URL, startBeat: Double, sourceOffsetSeconds: Double, lengthBeats: Double)] {
         guard let fileURL else { return [] }
-        return tracks.compactMap { track in
-            guard let region = track.audioRegions.last else { return nil }
-            let url = fileURL.appendingPathComponent("audio").appendingPathComponent(region.fileName)
-            return (url: url, startBeat: region.startBeat)
+        return tracks.flatMap { track in
+            track.audioRegions.map { region in
+                let url = fileURL.appendingPathComponent("audio").appendingPathComponent(region.fileName)
+                return (url: url, startBeat: region.startBeat, sourceOffsetSeconds: region.sourceOffsetSeconds, lengthBeats: region.lengthBeats)
+            }
         }
     }
 

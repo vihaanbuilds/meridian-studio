@@ -65,7 +65,7 @@ public final class PlaybackEngine {
     /// costs nothing extra here. `audioRegions` are plain `(url, startBeat)`
     /// pairs, not `AudioRegion` values — this module never resolves filenames
     /// into project-bundle paths, the app layer does that before calling.
-    public func play(regions: [MIDIRegion], audioRegions: [(url: URL, startBeat: Double)], tempo: Double) {
+    public func play(regions: [MIDIRegion], audioRegions: [(url: URL, startBeat: Double, sourceOffsetSeconds: Double, lengthBeats: Double)], tempo: Double) {
         // A second Play press must not stack on top of an unstopped previous one.
         // Called once here, not once per region — calling it per region would
         // cancel the previous region's just-scheduled tasks before they run.
@@ -92,12 +92,25 @@ public final class PlaybackEngine {
         }
         for audioRegion in audioRegions {
             guard let file = try? AVAudioFile(forReading: audioRegion.url) else { continue }
+            let sampleRate = file.processingFormat.sampleRate
             let startSeconds = Tempo.seconds(forBeats: audioRegion.startBeat, tempo: tempo)
             let when = AVAudioTime(
-                sampleTime: AVAudioFramePosition(max(startSeconds, 0) * file.processingFormat.sampleRate),
-                atRate: file.processingFormat.sampleRate
+                sampleTime: AVAudioFramePosition(max(startSeconds, 0) * sampleRate),
+                atRate: sampleRate
             )
-            audioPlayerNode.scheduleFile(file, at: when)
+            let startFrame = AVAudioFramePosition(audioRegion.sourceOffsetSeconds * sampleRate)
+            let durationSeconds = Tempo.seconds(forBeats: audioRegion.lengthBeats, tempo: tempo)
+            let requestedFrames = AVAudioFrameCount(max(durationSeconds, 0) * sampleRate)
+            // Clamp to what's actually left in the file. For an untrimmed region
+            // this should already match `requestedFrames` exactly (modulo
+            // floating-point rounding in the beats<->seconds<->frames round trip);
+            // this guard exists for a corrupt/truncated file, not to silently
+            // paper over a real trim-bounds bug — Task 6's trim-handle clamp is
+            // what actually keeps `requestedFrames` in range during normal use.
+            let remainingFrames = AVAudioFrameCount(max(file.length - startFrame, 0))
+            let frameCount = min(requestedFrames, remainingFrames)
+            guard frameCount > 0 else { continue }
+            audioPlayerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: when)
         }
         audioPlayerNode.play()
     }
