@@ -42,8 +42,10 @@ between (an earlier track was removed) is still the one targeted.
 
 The Edit menu's Undo (Cmd-Z) and Redo (Cmd-Shift-Z) drive this
 `UndoManager` through `AppState.undo()`/`redo()`
-(`AppState+Undo.swift`). Both are disabled while recording. While a
-text field is being edited, they act on that field's text instead.
+(`AppState+Undo.swift`). Project undo/redo are both disabled while
+recording (the field-editor branch below is unaffected by recording
+state). While a text field is being edited and its own undo manager has
+something to undo/redo, they act on that field's text instead.
 After a project undo/redo, `selectedTrackIndex` is clamped back into
 range. `AppState` republishes on `UndoManager` notifications so the
 menu's enabled-state stays current. Mute, solo, and tempo are not

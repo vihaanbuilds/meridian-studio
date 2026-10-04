@@ -137,10 +137,10 @@ CommandGroup(replacing: .undoRedo) {
 }
 ```
 
-Known limitation: while editing the tempo field with an empty project
-undo stack, the Undo item is disabled (its enabled-state doesn't see the
-field editor), so typing in that one field can't be undone with Cmd-Z
-in that case. Accepted — one numeric field, rarely undone.
+Undo/Redo correctly fall through to the project whenever the focused
+field editor has nothing of its own to undo/redo — the field-editor
+branch only takes over when that field's own undo manager reports
+`canUndo`/`canRedo`.
 
 Document swaps (`newProject`, `openProject`) create a fresh
 `ProjectDocument` and therefore a fresh, empty undo history — the
