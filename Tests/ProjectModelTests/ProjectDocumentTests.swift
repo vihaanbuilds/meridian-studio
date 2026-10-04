@@ -540,4 +540,26 @@ final class ProjectDocumentTests: XCTestCase {
         XCTAssertEqual(doc.project.tracks[1].regions.count, 1)
         XCTAssertTrue(doc.project.tracks[0].regions.isEmpty)
     }
+
+    // Review Focus: the test above doesn't actually distinguish id-based
+    // resolution from the old index-capture bug, because undo's LIFO order
+    // happens to restore the track to its original position before the
+    // region closure ever runs. This test forces a real discrepancy by
+    // moving a track's index *outside* the undo stack (via
+    // disableUndoRegistration/enableUndoRegistration), so only one real
+    // registerUndo call occurs and no grouping accommodation is needed.
+    func testUndoResolvesTrackByIDWhenIndexShiftedOutsideUndo() {
+        let trackA = Track(name: "A")
+        let trackB = Track(name: "B")
+        let doc = ProjectDocument(project: Project(tracks: [trackA, trackB]))
+        doc.addRegion(MIDIRegion(startBeat: 0, lengthBeats: 4, notes: []), toTrackAt: 1)
+
+        doc.undoManager.disableUndoRegistration()
+        doc.removeTrack(id: trackA.id)  // B shifts from index 1 to index 0, not on the undo stack
+        doc.undoManager.enableUndoRegistration()
+
+        doc.undoManager.undo()  // undoes the addRegion; must resolve track B by id, now at index 0
+        XCTAssertTrue(doc.project.tracks[0].regions.isEmpty)
+        XCTAssertEqual(doc.project.tracks[0].name, "B")
+    }
 }
