@@ -20,15 +20,15 @@ enum AudioImportError: Error, LocalizedError {
 
 extension AppState {
     /// Always creates a new audio track for the imported file, rather than
-    /// offering to add it to the currently selected track. `PlaybackEngine`
-    /// schedules a track's audio on one shared `AVAudioPlayerNode`, which
-    /// only plays a track's most recent audio region — a second region on
-    /// the same track would render in the timeline but never be heard.
-    /// Every audio track this way holds exactly one region, which keeps
-    /// that existing "most recent region" behavior correct rather than
-    /// silently wrong. Playing multiple regions on one track together is
-    /// real, unscoped future work (it needs more than one player node),
-    /// not something to half-support here.
+    /// offering to add it to the currently selected track. A track's audio
+    /// regions do all play together now (trim/split made that necessary —
+    /// see `AppState.resolveAudioRegions`), but there's still no UI here for
+    /// placing an imported file at a particular beat on an existing track
+    /// alongside whatever's already there, so a new track — starting the
+    /// import at beat 0 with nothing to collide with — is the simple,
+    /// unambiguous choice. Importing onto an existing track at a chosen
+    /// position is real, unscoped future work, not something to
+    /// half-support here.
     func importAudio() {
         guard !isRecording else { return }
         guard fileURL != nil else {

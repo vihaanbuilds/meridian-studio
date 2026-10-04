@@ -87,7 +87,8 @@ specific. Full detail: `docs/architecture.md`.
 | 3, milestone 1 | Audio recording (mic) + playback, level meters | Done |
 | 3, milestone 2 | Importing existing audio files + timeline audio-region rendering | Done |
 | 3, milestone 3 | Waveform rendering (single-band, then multi-band FFT frequency bands) | Done |
-| 3, later | Trim/split/fade/normalize | Not started |
+| 3, milestone 4 | Trim/split audio regions, sliced waveform rendering | Done (undo is model-level only — not yet wired to the Edit menu) |
+| 3, later | Fade/normalize | Not started |
 | 4–10 | Mixer, automation, AI foundation, AI music/audio/mix assistants, professionalization | Not started |
 
 **Meridian Companion**

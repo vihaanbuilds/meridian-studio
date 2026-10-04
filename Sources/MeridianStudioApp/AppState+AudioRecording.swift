@@ -12,7 +12,7 @@ enum AudioRecordingError: Error, LocalizedError {
         case .projectNotSaved:
             return "Save this project before recording audio — audio takes are written to a file next to your saved project."
         case .trackAlreadyHasAudio:
-            return "This track already has an audio region — recording onto it would silently replace what plays back, since only a track's most recent audio region is ever heard. Select a different track, or create a new one."
+            return "This track already has an audio region — a new recording would start at beat 0 and overlap it. Select a different track, or create a new one."
         }
     }
 }
@@ -25,12 +25,13 @@ extension AppState {
             presentError(AudioRecordingError.projectNotSaved)
             return
         }
-        // `PlaybackEngine` only ever plays a track's most recent audio
-        // region (`AppState.resolveAudioRegions`), so recording onto a
-        // track that already has one wouldn't fail — it would silently
-        // drop whatever was there, whether that region came from an
-        // earlier take or an import. Block it with a clear message rather
-        // than let it happen invisibly.
+        // Every region on a track plays (`AppState.resolveAudioRegions`
+        // resolves all of them, not just the most recent), but a new
+        // recording always starts at beat 0 — there's no UI yet to record
+        // into a gap elsewhere on the track — so recording onto a track
+        // that already has audio would overlap, not replace, whatever was
+        // there. Block it with a clear message rather than let the overlap
+        // happen invisibly.
         if document.project.tracks.indices.contains(selectedTrackIndex),
            !document.project.tracks[selectedTrackIndex].audioRegions.isEmpty {
             presentError(AudioRecordingError.trackAlreadyHasAudio)

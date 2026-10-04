@@ -26,20 +26,36 @@ app, `MeridianCompanionApp` (see `docs/companion.md`) — not just
 `MeridianStudioApp`. Neither app imports the other; this is enforced by
 `Package.swift` simply never listing that dependency.
 
-Undo/redo is model-level scaffolding only: `ProjectDocument` owns an
-`UndoManager` that `addRegion`/`removeRegion`/`addTrack`/`removeTrack`
-register with, and unit tests exercise undo and redo directly — but it
-is not wired into the app's Edit menu or responder chain, so Cmd-Z does
-nothing in the running app. Surfacing it in the UI remains deferred.
+Undo/redo is model-level only: `ProjectDocument` owns an `UndoManager`,
+and two tiers of operation register with it. The first tier —
+`addRegion`/`removeRegion`/`addTrack`/`removeTrack`/`addAudioRegion`/
+`removeAudioRegion` — is structural add/remove, and registers undo
+directly on the call that mutates. The second, newer tier covers field
+edits that happen gradually across a drag: a cheap `update…` setter
+(`updateNote`/`updateAudioRegion`) with *no* undo registration is called
+on every `onChanged` frame, and a single `commit…Edit` call
+(`commitNoteEdit`/`commitAudioRegionEdit`) at gesture-end captures the
+pre-gesture value and registers the one undo step that restores it —
+turning an arbitrarily long drag into exactly one undo step instead of
+one per frame. `splitAudioRegion` is structural (it's not a drag) but
+also registers a single step, via `mergeAudioRegions`'s mutual
+re-registration rather than three chained add/remove calls. Unit tests
+exercise undo and redo directly for both tiers — but **none of this is
+wired into the app's Edit menu or responder chain: Cmd-Z does nothing in
+the running app.** Surfacing it in the UI remains deferred.
 
 One hazard must be resolved before undo is ever wired up: the undo
-closures registered by `addRegion`/`removeRegion` capture a track
-*index*, and `removeTrack` (new in this branch) invalidates those indices
-by shifting every later track down one. An undo of a region change that
-straddles a track removal would therefore target the wrong track — or no
-track at all, silently, via the bounds guard. It is unreachable today
-only because no UI path can invoke undo; capturing the track `id` instead
-of its index is the fix.
+closures registered by `addRegion`/`removeRegion` — and now also by
+`commitNoteEdit`/`commitAudioRegionEdit`/`splitAudioRegion`, which all
+take an explicit `trackIndex` the same way — capture a track *index*,
+and `removeTrack` (new in this branch) invalidates those indices by
+shifting every later track down one. An undo (or redo) of a region/note/
+audio-region edit that straddles a track removal would therefore target
+the wrong track — or no track at all, silently, via the bounds guard.
+It is unreachable today only because no UI path can invoke undo;
+capturing each track's `id` instead of its index — for every one of
+these closures, not just the original two — is the fix, and it needs to
+land before Cmd-Z is wired up, not after.
 
 A second thing to settle before that day: `quantizeNotes`, like
 `updateNote`, is a field edit with no undo registration — but unlike a
@@ -51,9 +67,13 @@ covering the whole quantize pass.
 Multi-track support (Phase 2): `addTrack`/`removeTrack` are
 undo-registered structural operations, matching `addRegion`/
 `removeRegion`; `setTrackMuted`/`setTrackSolo` are direct field
-mutations with no undo registration, matching `setTempo` — undo is
-reserved for structural add/remove throughout `ProjectDocument`, never
-for field edits. `TrackAudibility.audibleTracks(in:)` implements the
+mutations with no undo registration, matching `setTempo`. (Undo was
+reserved for structural add/remove exclusively at the time this
+paragraph was first written; the `update…`/`commit…Edit` tier described
+above later extended it to field edits too — `setTrackMuted`/
+`setTrackSolo`/`setTempo` simply haven't been given that treatment,
+not because field edits are undo-exempt in general.)
+`TrackAudibility.audibleTracks(in:)` implements the
 standard DAW convention: if any track is soloed, only soloed tracks are
 audible (solo overrides mute on the same track); otherwise every
 non-muted track is audible. `AppState.selectedTrackIndex` is the track

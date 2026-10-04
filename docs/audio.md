@@ -24,12 +24,19 @@ discard) is real, additional complexity this milestone defers — the app
 surfaces a clear alert rather than crashing or silently failing.
 
 ## Playback
-`PlaybackEngine` schedules audio regions via `AVAudioPlayerNode.scheduleFile(at:)`
+`PlaybackEngine` schedules audio regions via `AVAudioPlayerNode.scheduleSegment(_:startingFrame:frameCount:at:)`
 using sample-accurate `AVAudioTime` — a meaningfully different approach
 from the existing MIDI note scheduling, which uses wall-clock
 `Task.sleep` (see docs/midi.md). Both paths currently produce the same
 "audible and roughly in sync" result; unifying them under one scheduling
 strategy is a candidate future refinement, not a Phase 3 requirement.
+`scheduleSegment` (rather than the whole-file `scheduleFile`) is what
+makes trim and split possible: it schedules only the slice of the
+underlying file a region's `sourceOffsetSeconds`/`lengthBeats` actually
+covers, so a trimmed or split region plays back without touching the
+file on disk. All regions share one `AVAudioPlayerNode`, so
+`AppState.resolveAudioRegions` sorts them chronologically before
+scheduling — see "Trim & split" below.
 
 ## Level meters
 `AudioLevelMeter.peak(of:)` is a simple peak meter — the largest
@@ -47,13 +54,53 @@ A later Phase 3 milestone (see
 `docs/superpowers/specs/2026-09-21-audio-import-design.md`) added
 `AppState.importAudio()`: File > Import Audio… copies a picked file
 into the project bundle (never transcodes it) and always creates a new
-audio track for it — never appends to an existing track. That's a
-deliberate scope limit, not an oversight: `PlaybackEngine` only ever
-plays a track's most recent audio region (see "Playback" above), so a
-second region on one track would render in the timeline but never be
-heard. Every audio track this way holds exactly one region, which keeps
-that existing behavior correct. Playing multiple regions on one track
-together is real, unscoped future work.
+audio track for it — never appends to an existing track. Every region
+on a track plays today (see "Trim & split" below), so this isn't a
+playback-correctness workaround; it's just that there's no UI yet for
+placing an imported file at a chosen beat on an existing track without
+colliding with what's already there, so a new track — starting the
+import at beat 0 with nothing to collide with — is the simple,
+unambiguous choice. Importing onto an existing track at a chosen
+position is real, unscoped future work.
+
+## Trim & split
+A later Phase 3 milestone (see
+`docs/superpowers/specs/2026-10-02-audio-trim-split-design.md`) added
+non-destructive trimming and splitting of audio regions directly in the
+timeline: drag either edge handle to trim, or double-click inside a
+region to split it into two. Neither operation reads, copies, or writes
+the underlying audio file — both only change an `AudioRegion`'s
+`startBeat`/`lengthBeats`/`sourceOffsetSeconds`, which is what makes
+them non-destructive and instant. `sourceOffsetSeconds` is how far into
+the file a region's playback starts; trimming the leading edge moves
+`startBeat`/`sourceOffsetSeconds` together (and cannot push either past
+the file's own start or the region's own start, see
+`TimelineView.trimLeadingGesture`), trimming the trailing edge only
+changes `lengthBeats`, and splitting a region replaces it with two new
+regions that share its `fileName` and partition its
+`sourceOffsetSeconds` range. `WaveformView` renders the matching slice
+of the cached `WaveformBands` via `WaveformBands.slice`, so a trimmed or
+split region's waveform always matches what will actually play.
+
+A region's playback length follows `lengthBeats` *at the current
+tempo* — `PlaybackEngine` converts beats to seconds with
+`Tempo.seconds(forBeats:tempo:)` at play time, not at record/trim time —
+so changing the project's tempo after recording or trimming a region
+changes how much of the underlying file that region plays, including
+for regions that predate this feature. This is pre-existing beats-based
+behavior, not something trim/split introduced, but it's sharper now
+that `sourceOffsetSeconds` makes "how much of the file" a user-visible,
+directly-manipulated quantity.
+
+Every region on a track plays back now, not just the most recent one —
+splitting a region doubles a track's region count, so "only the most
+recent region is heard" stopped being true the moment split shipped.
+`AppState.resolveAudioRegions` resolves every audible track's every
+audio region and sorts the results chronologically by `startBeat`
+before handing them to `PlaybackEngine`, since all audio shares one
+`AVAudioPlayerNode` and a split leaves the model's `audioRegions` array
+in non-chronological order (the original is removed and both halves are
+appended at the end).
 
 ## Waveform rendering
 Later Phase 3 milestones added an actual visual of each `AudioRegion`'s
@@ -71,8 +118,8 @@ audio file (`.bandpeaks`, superseding the earlier `.peaks` format), and
 Meridian Studio-only — Companion has no per-region waveform view.
 
 ## Non-goals of this milestone
-No trim/split/fade/normalize, no per-track gain/pan, and no
-glitch-proof capture under load — all deferred to later Phase 3
-milestones or Phase 4's mixer. (Waveform rendering was a non-goal of
-*this* milestone specifically but has since shipped — see "Waveform
-rendering" above.)
+No fade/normalize, no per-track gain/pan, and no glitch-proof capture
+under load — all deferred to later Phase 3 milestones or Phase 4's
+mixer. (Waveform rendering and trim/split were both non-goals of *this*
+milestone specifically but have since shipped — see "Waveform
+rendering" and "Trim & split" above.)
