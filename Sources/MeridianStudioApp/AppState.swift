@@ -251,12 +251,20 @@ final class AppState: ObservableObject {
     /// due to a nil `fileURL` in practice.
     private func resolveAudioRegions(in tracks: [Track]) -> [(url: URL, startBeat: Double, sourceOffsetSeconds: Double, lengthBeats: Double)] {
         guard let fileURL else { return [] }
-        return tracks.flatMap { track in
+        let resolved = tracks.flatMap { track in
             track.audioRegions.map { region in
                 let url = fileURL.appendingPathComponent("audio").appendingPathComponent(region.fileName)
                 return (url: url, startBeat: region.startBeat, sourceOffsetSeconds: region.sourceOffsetSeconds, lengthBeats: region.lengthBeats)
             }
         }
+        // Chronological, not model order: splitting a region removes the
+        // original and appends both halves at the end of `audioRegions`, so
+        // this array is not already time-ordered. All audio shares one
+        // `AVAudioPlayerNode`, so scheduling it in a deterministic,
+        // chronological order (rather than whatever order splits happened to
+        // leave things in) keeps `PlaybackEngine.play`'s scheduling behavior
+        // predictable.
+        return resolved.sorted { $0.startBeat < $1.startBeat }
     }
 
     func stopPlayback() {

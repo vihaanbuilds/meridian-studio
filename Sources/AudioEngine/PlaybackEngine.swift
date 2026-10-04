@@ -99,7 +99,10 @@ public final class PlaybackEngine {
                 sampleTime: AVAudioFramePosition(max(startSeconds, 0) * sampleRate),
                 atRate: sampleRate
             )
-            let startFrame = AVAudioFramePosition(audioRegion.sourceOffsetSeconds * sampleRate)
+            // A hand-edited project file could carry a negative
+            // `sourceOffsetSeconds`; clamp so a negative `startingFrame` never
+            // reaches `scheduleSegment`.
+            let startFrame = max(0, AVAudioFramePosition(audioRegion.sourceOffsetSeconds * sampleRate))
             let durationSeconds = Tempo.seconds(forBeats: audioRegion.lengthBeats, tempo: tempo)
             let requestedFrames = AVAudioFrameCount(max(durationSeconds, 0) * sampleRate)
             // Clamp to what's actually left in the file. For an untrimmed region

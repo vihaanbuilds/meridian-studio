@@ -50,9 +50,14 @@ struct TimelineView: View {
                 // Dragging right (positive delta) can't shrink the region
                 // below minimumRegionLengthBeats; dragging left (negative
                 // delta) can't push sourceOffsetSeconds below 0 — there's no
-                // audio before the file's own start.
+                // audio before the file's own start — and also can't push
+                // startBeat below 0: after a tempo increase,
+                // `Tempo.beats(forSeconds:tempo:)` on the same
+                // sourceOffsetSeconds can exceed start.startBeat, which
+                // without this second bound would move the region to a
+                // negative, off-canvas, unreachable beat.
                 let maxDeltaBeats = start.lengthBeats - minimumRegionLengthBeats
-                let minDeltaBeats = -Tempo.beats(forSeconds: start.sourceOffsetSeconds, tempo: tempo)
+                let minDeltaBeats = max(-Tempo.beats(forSeconds: start.sourceOffsetSeconds, tempo: tempo), -start.startBeat)
                 let clampedDeltaBeats = min(max(deltaBeats, minDeltaBeats), maxDeltaBeats)
                 var updated = start
                 updated.startBeat = start.startBeat + clampedDeltaBeats

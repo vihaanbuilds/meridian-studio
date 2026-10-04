@@ -306,6 +306,7 @@ final class ProjectDocumentTests: XCTestCase {
         doc.splitAudioRegion(id: region.id, atBeat: 10, tempo: 120, inTrackAt: 0)  // beyond the end
 
         XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 1)
+        XCTAssertFalse(doc.undoManager.canUndo)
     }
 
     func testUndoSplitAudioRegionRestoresOriginalInOneStep() {
@@ -325,10 +326,53 @@ final class ProjectDocumentTests: XCTestCase {
         let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
 
         doc.splitAudioRegion(id: region.id, atBeat: 1, tempo: 120, inTrackAt: 0)
+        let halvesAfterFirstSplit = doc.project.tracks[0].audioRegions
         doc.undoManager.undo()
         doc.undoManager.redo()
 
+        // Equality here includes `id` (AudioRegion's Equatable is synthesized),
+        // and `splitAudioRegion` always appends its two halves in the same
+        // [first, second] order, so this also checks order. This is the
+        // regression guard for the redo-after-undo bug where `splitAudioRegion`
+        // minted fresh UUIDs on every call, so a later operation targeting a
+        // half by its original id (e.g. a second split, or redoing one) would
+        // silently no-op against ids that no longer existed in the model.
         XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 2)
+        XCTAssertEqual(doc.project.tracks[0].audioRegions, halvesAfterFirstSplit)
+    }
+
+    // Regression guard for the redo-after-undo id-stability bug: split R,
+    // split its left half, then undo both splits and redo both. The second
+    // redo's `mergeAudioRegions` undo closure targets the *first* split's
+    // halves by the ids that split minted — if a later call re-split and
+    // minted brand-new ids instead of reusing the ones it was given, this
+    // redo would silently no-op and leave only 2 regions instead of 3.
+    func testRedoOfTwoSequentialSplitsEachReSplitsCorrectly() {
+        let region = AudioRegion(startBeat: 0, lengthBeats: 4, fileName: "take1.wav")
+        let doc = ProjectDocument(project: Project(tempo: 120, tracks: [Track(name: "Guitar", kind: .audio, audioRegions: [region])]))
+        // See testSequentialTrimThenSplitEachUndoIndependently for why this is
+        // necessary: two top-level undo-registering calls back to back with no
+        // run-loop turn would otherwise merge into one undo group under
+        // groupsByEvent's default synchronous-test behavior. This is a
+        // test-only accommodation on this test's own `doc`, never production code.
+        doc.undoManager.groupsByEvent = false
+
+        doc.undoManager.beginUndoGrouping()
+        doc.splitAudioRegion(id: region.id, atBeat: 2, tempo: 120, inTrackAt: 0)
+        doc.undoManager.endUndoGrouping()
+        let leftHalf = doc.project.tracks[0].audioRegions.first { $0.startBeat == 0 }!
+
+        doc.undoManager.beginUndoGrouping()
+        doc.splitAudioRegion(id: leftHalf.id, atBeat: 1, tempo: 120, inTrackAt: 0)
+        doc.undoManager.endUndoGrouping()
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 3)
+
+        doc.undoManager.undo()
+        doc.undoManager.undo()
+        doc.undoManager.redo()
+        doc.undoManager.redo()
+
+        XCTAssertEqual(doc.project.tracks[0].audioRegions.count, 3)
     }
 
     func testUpdateAudioRegionChangesFieldsWithNoUndoRegistered() {

@@ -67,6 +67,18 @@ public final class ProjectDocument: ObservableObject {
     /// `removeAudioRegion`/`addAudioRegion` calls, which would register
     /// three separate undo steps instead of one.
     public func splitAudioRegion(id: UUID, atBeat splitBeat: Double, tempo: Double, inTrackAt trackIndex: Int) {
+        splitAudioRegion(id: id, atBeat: splitBeat, tempo: tempo, inTrackAt: trackIndex, firstID: UUID(), secondID: UUID())
+    }
+
+    /// The actual implementation behind the public `splitAudioRegion`, taking
+    /// the two halves' ids as parameters instead of minting fresh ones every
+    /// call. This is what lets `mergeAudioRegions`'s undo closure re-run a
+    /// split as a *redo* and land on the exact same halves (same ids) it
+    /// undid — minting new UUIDs on every call would mean a later undo/redo
+    /// of some *other* operation that still refers to those halves by id
+    /// (e.g. a subsequent split of one half, or a trim) would silently no-op
+    /// against ids that no longer exist in the model.
+    private func splitAudioRegion(id: UUID, atBeat splitBeat: Double, tempo: Double, inTrackAt trackIndex: Int, firstID: UUID, secondID: UUID) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == id }) else { return }
         let original = project.tracks[trackIndex].audioRegions[index]
@@ -75,11 +87,11 @@ public final class ProjectDocument: ObservableObject {
         let firstLengthBeats = splitBeat - original.startBeat
         let elapsedSeconds = Tempo.seconds(forBeats: firstLengthBeats, tempo: tempo)
         let first = AudioRegion(
-            startBeat: original.startBeat, lengthBeats: firstLengthBeats,
+            id: firstID, startBeat: original.startBeat, lengthBeats: firstLengthBeats,
             fileName: original.fileName, sourceOffsetSeconds: original.sourceOffsetSeconds
         )
         let second = AudioRegion(
-            startBeat: splitBeat, lengthBeats: original.lengthBeats - firstLengthBeats,
+            id: secondID, startBeat: splitBeat, lengthBeats: original.lengthBeats - firstLengthBeats,
             fileName: original.fileName, sourceOffsetSeconds: original.sourceOffsetSeconds + elapsedSeconds
         )
 
@@ -104,7 +116,7 @@ public final class ProjectDocument: ObservableObject {
 
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
-                doc.splitAudioRegion(id: original.id, atBeat: splitBeat, tempo: tempo, inTrackAt: trackIndex)
+                doc.splitAudioRegion(id: original.id, atBeat: splitBeat, tempo: tempo, inTrackAt: trackIndex, firstID: firstID, secondID: secondID)
             }
         }
     }
