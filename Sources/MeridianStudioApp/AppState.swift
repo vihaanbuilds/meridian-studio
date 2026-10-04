@@ -76,6 +76,11 @@ final class AppState: ObservableObject {
     private var pollTimer: Timer?
     private var playbackCompletionTask: Task<Void, Never>?
     private var documentCancellable: AnyCancellable?
+    /// Republishes when the current document's undo stack changes, so the
+    /// Edit menu's Undo/Redo enabled-state stays current. Not every
+    /// undo-stack change coincides with a `@Published` model change — a
+    /// group closing at the end of an event doesn't.
+    private var undoStackCancellable: AnyCancellable?
 
     private static let queuePollInterval: TimeInterval = 0.01
 
@@ -120,6 +125,16 @@ final class AppState: ObservableObject {
         // zero-track file loaded from disk.
         selectedTrackIndex = 0
         documentCancellable = document.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        let undoManager = document.undoManager
+        let center = NotificationCenter.default
+        undoStackCancellable = Publishers.MergeMany(
+            center.publisher(for: .NSUndoManagerDidCloseUndoGroup, object: undoManager),
+            center.publisher(for: .NSUndoManagerDidUndoChange, object: undoManager),
+            center.publisher(for: .NSUndoManagerDidRedoChange, object: undoManager)
+        )
+        .sink { [weak self] _ in
             self?.objectWillChange.send()
         }
     }
@@ -352,7 +367,7 @@ final class AppState: ObservableObject {
         // restated here so the two cannot drift apart. Without it, quantizing a note
         // near the canvas edge could push it out of the reachable/scrollable area the
         // exact way an unclamped drag could — invisible, unreachable by scrolling, and
-        // unrecoverable, since neither updateNote nor quantizeNotes is undo-registered.
+        // effectively lost: undo can restore it, but until then it can't be seen or edited.
         document.quantizeNotes(gridBeats: quantizeGridBeats, strength: quantizeStrength, maxStartBeat: PianoRollView.canvasBeats, inTrackAt: selectedTrackIndex)
     }
 

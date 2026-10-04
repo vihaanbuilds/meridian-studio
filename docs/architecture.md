@@ -26,43 +26,28 @@ app, `MeridianCompanionApp` (see `docs/companion.md`) — not just
 `MeridianStudioApp`. Neither app imports the other; this is enforced by
 `Package.swift` simply never listing that dependency.
 
-Undo/redo is model-level only: `ProjectDocument` owns an `UndoManager`,
-and two tiers of operation register with it. The first tier —
+Undo/redo: `ProjectDocument` owns an `UndoManager`, and two tiers of
+operation register with it. The first tier —
 `addRegion`/`removeRegion`/`addTrack`/`removeTrack`/`addAudioRegion`/
-`removeAudioRegion` — is structural add/remove, and registers undo
-directly on the call that mutates. The second, newer tier covers field
-edits that happen gradually across a drag: a cheap `update…` setter
-(`updateNote`/`updateAudioRegion`) with *no* undo registration is called
-on every `onChanged` frame, and a single `commit…Edit` call
-(`commitNoteEdit`/`commitAudioRegionEdit`) at gesture-end captures the
-pre-gesture value and registers the one undo step that restores it —
-turning an arbitrarily long drag into exactly one undo step instead of
-one per frame. `splitAudioRegion` is structural (it's not a drag) but
-also registers a single step, via `mergeAudioRegions`'s mutual
-re-registration rather than three chained add/remove calls. Unit tests
-exercise undo and redo directly for both tiers — but **none of this is
-wired into the app's Edit menu or responder chain: Cmd-Z does nothing in
-the running app.** Surfacing it in the UI remains deferred.
+`removeAudioRegion`/`deleteNotes`, plus `splitAudioRegion` and
+`quantizeNotes` — registers one undo step on the call that mutates. The
+second tier covers edits that happen gradually across a drag: a cheap
+`update…` setter (`updateNote`/`updateAudioRegion`) with *no* undo
+registration runs on every `onChanged` frame, and a single
+`commit…Edit` call (`commitNoteEdit`/`commitAudioRegionEdit`) at
+gesture-end registers the one undo step that restores the pre-gesture
+value. Every undo closure captures the affected track's `id` and
+resolves it to an index when it runs, so a track whose index shifted in
+between (an earlier track was removed) is still the one targeted.
 
-One hazard must be resolved before undo is ever wired up: the undo
-closures registered by `addRegion`/`removeRegion` — and now also by
-`commitNoteEdit`/`commitAudioRegionEdit`/`splitAudioRegion`, which all
-take an explicit `trackIndex` the same way — capture a track *index*,
-and `removeTrack` (new in this branch) invalidates those indices by
-shifting every later track down one. An undo (or redo) of a region/note/
-audio-region edit that straddles a track removal would therefore target
-the wrong track — or no track at all, silently, via the bounds guard.
-It is unreachable today only because no UI path can invoke undo;
-capturing each track's `id` instead of its index — for every one of
-these closures, not just the original two — is the fix, and it needs to
-land before Cmd-Z is wired up, not after.
-
-A second thing to settle before that day: `quantizeNotes`, like
-`updateNote`, is a field edit with no undo registration — but unlike a
-single-note edit it can discard an entire take's recorded timing in one
-click, irreversibly. When undo is surfaced in the UI, that will need
-reconsidering, most likely by registering a single compound undo action
-covering the whole quantize pass.
+The Edit menu's Undo (Cmd-Z) and Redo (Cmd-Shift-Z) drive this
+`UndoManager` through `AppState.undo()`/`redo()`
+(`AppState+Undo.swift`). Both are disabled while recording. While a
+text field is being edited, they act on that field's text instead.
+After a project undo/redo, `selectedTrackIndex` is clamped back into
+range. `AppState` republishes on `UndoManager` notifications so the
+menu's enabled-state stays current. Mute, solo, and tempo are not
+undoable. Undoing a recording removes the region but not its audio file.
 
 Multi-track support (Phase 2): `addTrack`/`removeTrack` are
 undo-registered structural operations, matching `addRegion`/

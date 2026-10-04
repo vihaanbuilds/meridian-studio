@@ -18,6 +18,14 @@ struct MeridianStudioApp: App {
                 .frame(minWidth: 800, minHeight: 500)
         }
         .commands {
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo") { appState.undo() }
+                    .keyboardShortcut("z", modifiers: .command)
+                    .disabled(!appState.canUndo)
+                Button("Redo") { appState.redo() }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+                    .disabled(!appState.canRedo)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Project") { appState.newProject() }
                     .keyboardShortcut("n", modifiers: .command)
