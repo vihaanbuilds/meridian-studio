@@ -3,6 +3,7 @@ import SwiftUI
 
 struct TransportView: View {
     @EnvironmentObject var appState: AppState
+    @FocusState private var tempoFieldIsFocused: Bool
 
     private var tempoBinding: Binding<Double> {
         Binding(
@@ -31,6 +32,8 @@ struct TransportView: View {
                 Text("Tempo")
                 TextField("Tempo", value: tempoBinding, format: .number)
                     .frame(width: 60)
+                    .focused($tempoFieldIsFocused)
+                    .onSubmit { tempoFieldIsFocused = false }
             }
             Divider().frame(height: 20)
             LevelMeterView(label: "In", level: appState.inputLevel)
