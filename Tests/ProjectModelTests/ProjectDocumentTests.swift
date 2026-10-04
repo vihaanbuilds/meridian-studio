@@ -211,8 +211,23 @@ final class ProjectDocumentTests: XCTestCase {
         XCTAssertEqual(doc.project.tracks[0].regions[1].notes[0].startBeat, 0.25, accuracy: 0.0001) // quantized
     }
 
-    func testQuantizeNotesIsNotUndoRegistered() {
+    func testQuantizeNotesRegistersOneUndoStepThatRestoresOriginalTiming() {
         let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.3, lengthBeats: 1)
+        let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
+        let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
+
+        doc.quantizeNotes(gridBeats: 0.25, strength: 1, inTrackAt: 0)
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].startBeat, 0.25, accuracy: 0.0001)
+
+        doc.undoManager.undo()
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].startBeat, 0.3, accuracy: 0.0001)
+
+        doc.undoManager.redo()
+        XCTAssertEqual(doc.project.tracks[0].regions[0].notes[0].startBeat, 0.25, accuracy: 0.0001)
+    }
+
+    func testQuantizeNotesRegistersNoUndoWhenNothingChanges() {
+        let note = NoteEvent(pitch: 60, velocity: 100, startBeat: 0.5, lengthBeats: 1)
         let region = MIDIRegion(startBeat: 0, lengthBeats: 4, notes: [note])
         let doc = ProjectDocument(project: Project(tracks: [Track(name: "Piano", regions: [region])]))
 
@@ -493,5 +508,36 @@ final class ProjectDocumentTests: XCTestCase {
 
         doc.undoManager.undo()
         XCTAssertEqual(doc.project.tracks[0].audioRegions[0].lengthBeats, 4)
+    }
+
+    // Review Focus: undo closures capture the track's id, not its index.
+    // Two top-level undo-registering calls back to back, so this uses the
+    // test-only grouping accommodation (see
+    // testSequentialTrimThenSplitEachUndoIndependently for why).
+    func testUndoTargetsTrackByIDAfterAnEarlierTrackIsRemovedAndRestored() {
+        let trackA = Track(name: "A")
+        let trackB = Track(name: "B")
+        let doc = ProjectDocument(project: Project(tracks: [trackA, trackB]))
+        doc.undoManager.groupsByEvent = false
+
+        doc.undoManager.beginUndoGrouping()
+        doc.addRegion(MIDIRegion(startBeat: 0, lengthBeats: 4, notes: []), toTrackAt: 1)
+        doc.undoManager.endUndoGrouping()
+
+        doc.undoManager.beginUndoGrouping()
+        doc.removeTrack(id: trackA.id)
+        doc.undoManager.endUndoGrouping()
+        XCTAssertEqual(doc.project.tracks.map(\.name), ["B"])
+
+        doc.undoManager.undo()  // restores A at index 0
+        XCTAssertEqual(doc.project.tracks.map(\.name), ["A", "B"])
+
+        doc.undoManager.undo()  // removes the region from B, by id
+        XCTAssertTrue(doc.project.tracks[1].regions.isEmpty)
+        XCTAssertEqual(doc.project.tracks[1].name, "B")
+
+        doc.undoManager.redo()  // re-adds the region to B, by id
+        XCTAssertEqual(doc.project.tracks[1].regions.count, 1)
+        XCTAssertTrue(doc.project.tracks[0].regions.isEmpty)
     }
 }

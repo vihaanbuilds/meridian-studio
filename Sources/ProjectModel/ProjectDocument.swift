@@ -10,8 +10,17 @@ public final class ProjectDocument: ObservableObject {
         self.project = project
     }
 
+    /// Undo closures capture a track's `id`, never its index, and resolve it
+    /// here when they run: a track's index can shift (a track before it was
+    /// removed) between when an action is registered and when it's undone or
+    /// redone. A track that no longer exists makes the closure a no-op.
+    func trackIndex(forID id: UUID) -> Int? {
+        project.tracks.firstIndex(where: { $0.id == id })
+    }
+
     public func addRegion(_ region: MIDIRegion, toTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
+        let trackID = project.tracks[trackIndex].id
         project.tracks[trackIndex].regions.append(region)
         undoManager.registerUndo(withTarget: self) { doc in
             // UndoManager's handler type predates Swift concurrency and isn't itself
@@ -19,6 +28,7 @@ public final class ProjectDocument: ObservableObject {
             // MainActor-isolated code in this app, so this is genuinely safe — the
             // standard bridge for a legacy Foundation callback API like this one.
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.removeRegion(id: region.id, fromTrackAt: trackIndex)
             }
         }
@@ -27,9 +37,11 @@ public final class ProjectDocument: ObservableObject {
     public func removeRegion(id: UUID, fromTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let index = project.tracks[trackIndex].regions.firstIndex(where: { $0.id == id }) else { return }
+        let trackID = project.tracks[trackIndex].id
         let removed = project.tracks[trackIndex].regions.remove(at: index)
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.addRegion(removed, toTrackAt: trackIndex)
             }
         }
@@ -37,9 +49,11 @@ public final class ProjectDocument: ObservableObject {
 
     public func addAudioRegion(_ region: AudioRegion, toTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
+        let trackID = project.tracks[trackIndex].id
         project.tracks[trackIndex].audioRegions.append(region)
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.removeAudioRegion(id: region.id, fromTrackAt: trackIndex)
             }
         }
@@ -48,9 +62,11 @@ public final class ProjectDocument: ObservableObject {
     public func removeAudioRegion(id: UUID, fromTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == id }) else { return }
+        let trackID = project.tracks[trackIndex].id
         let removed = project.tracks[trackIndex].audioRegions.remove(at: index)
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.addAudioRegion(removed, toTrackAt: trackIndex)
             }
         }
@@ -83,6 +99,7 @@ public final class ProjectDocument: ObservableObject {
         guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == id }) else { return }
         let original = project.tracks[trackIndex].audioRegions[index]
         guard splitBeat > original.startBeat, splitBeat < original.startBeat + original.lengthBeats else { return }
+        let trackID = project.tracks[trackIndex].id
 
         let firstLengthBeats = splitBeat - original.startBeat
         let elapsedSeconds = Tempo.seconds(forBeats: firstLengthBeats, tempo: tempo)
@@ -101,6 +118,7 @@ public final class ProjectDocument: ObservableObject {
 
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.mergeAudioRegions(first.id, second.id, into: original, splitBeat: splitBeat, tempo: tempo, inTrackAt: trackIndex)
             }
         }
@@ -111,11 +129,13 @@ public final class ProjectDocument: ObservableObject {
     /// into `splitAudioRegion` at the same point, so redo re-splits.
     private func mergeAudioRegions(_ firstID: UUID, _ secondID: UUID, into original: AudioRegion, splitBeat: Double, tempo: Double, inTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
+        let trackID = project.tracks[trackIndex].id
         project.tracks[trackIndex].audioRegions.removeAll { $0.id == firstID || $0.id == secondID }
         project.tracks[trackIndex].audioRegions.append(original)
 
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.splitAudioRegion(id: original.id, atBeat: splitBeat, tempo: tempo, inTrackAt: trackIndex, firstID: firstID, secondID: secondID)
             }
         }
@@ -131,14 +151,16 @@ public final class ProjectDocument: ObservableObject {
 
     /// Called once, at drag-end, with the region's value captured when the
     /// drag started. Registers one undo step for the whole gesture, mirroring
-    /// `commitNoteEdit`.
+    /// `commitNoteEdit`. A no-op (no undo registered) when nothing changed.
     public func commitAudioRegionEdit(from original: AudioRegion, inTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let index = project.tracks[trackIndex].audioRegions.firstIndex(where: { $0.id == original.id }) else { return }
         let current = project.tracks[trackIndex].audioRegions[index]
         guard current != original else { return }
+        let trackID = project.tracks[trackIndex].id
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.updateAudioRegion(original, inTrackAt: trackIndex)
                 doc.commitAudioRegionEdit(from: current, inTrackAt: trackIndex)
             }
@@ -187,17 +209,20 @@ public final class ProjectDocument: ObservableObject {
     /// drag started. Registers one undo step for the whole gesture —
     /// restoring `original` via the same mutual-re-registration idiom
     /// `addRegion`/`removeRegion` already use, so redo works symmetrically.
-    /// `updateNote` itself stays undo-free on purpose: it's called on every
-    /// `onChanged` frame during a drag, and registering undo there would
-    /// turn one drag gesture into dozens of undo steps.
+    /// A no-op (no undo registered) when nothing changed. `updateNote` itself
+    /// stays undo-free on purpose: it's called on every `onChanged` frame
+    /// during a drag, and registering undo there would turn one drag gesture
+    /// into dozens of undo steps.
     public func commitNoteEdit(from original: NoteEvent, inTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
         guard let noteIndex = project.tracks[trackIndex].regions[regionIndex].notes.firstIndex(where: { $0.id == original.id }) else { return }
         let current = project.tracks[trackIndex].regions[regionIndex].notes[noteIndex]
         guard current != original else { return }
+        let trackID = project.tracks[trackIndex].id
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.updateNote(original, inTrackAt: trackIndex)
                 doc.commitNoteEdit(from: current, inTrackAt: trackIndex)
             }
@@ -209,9 +234,11 @@ public final class ProjectDocument: ObservableObject {
         guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
         let removedNotes = project.tracks[trackIndex].regions[regionIndex].notes.filter { ids.contains($0.id) }
         guard !removedNotes.isEmpty else { return }
+        let trackID = project.tracks[trackIndex].id
         project.tracks[trackIndex].regions[regionIndex].notes.removeAll { ids.contains($0.id) }
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.restoreNotes(removedNotes, inTrackAt: trackIndex)
             }
         }
@@ -220,10 +247,12 @@ public final class ProjectDocument: ObservableObject {
     private func restoreNotes(_ notes: [NoteEvent], inTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
+        let trackID = project.tracks[trackIndex].id
         project.tracks[trackIndex].regions[regionIndex].notes.append(contentsOf: notes)
         let ids = Set(notes.map(\.id))
         undoManager.registerUndo(withTarget: self) { doc in
             MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
                 doc.deleteNotes(ids: ids, inTrackAt: trackIndex)
             }
         }
@@ -232,12 +261,33 @@ public final class ProjectDocument: ObservableObject {
     /// `maxStartBeat` is passed straight through to `Quantizer.quantize`: an
     /// optional upper bound on where a quantized note may end, supplied by the
     /// UI that has to keep the note reachable. `nil` (the default) means no
-    /// bound.
+    /// bound. Registers one undo step restoring the pre-quantize notes (one
+    /// click can rewrite a whole take's timing); registers nothing if
+    /// quantizing changes nothing.
     public func quantizeNotes(gridBeats: Double, strength: Double, maxStartBeat: Double? = nil, inTrackAt trackIndex: Int) {
         guard project.tracks.indices.contains(trackIndex) else { return }
         guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
         let notes = project.tracks[trackIndex].regions[regionIndex].notes
-        project.tracks[trackIndex].regions[regionIndex].notes = Quantizer.quantize(notes, gridBeats: gridBeats, strength: strength, maxStartBeat: maxStartBeat)
+        let quantized = Quantizer.quantize(notes, gridBeats: gridBeats, strength: strength, maxStartBeat: maxStartBeat)
+        guard quantized != notes else { return }
+        replaceNotes(quantized, inTrackAt: trackIndex)
+    }
+
+    /// Replaces the last region's notes wholesale and registers its own
+    /// inverse (the notes it replaced) — the mutual re-registration idiom, so
+    /// undo restores the old notes and redo re-applies the new ones.
+    private func replaceNotes(_ notes: [NoteEvent], inTrackAt trackIndex: Int) {
+        guard project.tracks.indices.contains(trackIndex) else { return }
+        guard let regionIndex = project.tracks[trackIndex].regions.indices.last else { return }
+        let trackID = project.tracks[trackIndex].id
+        let previous = project.tracks[trackIndex].regions[regionIndex].notes
+        project.tracks[trackIndex].regions[regionIndex].notes = notes
+        undoManager.registerUndo(withTarget: self) { doc in
+            MainActor.assumeIsolated {
+                guard let trackIndex = doc.trackIndex(forID: trackID) else { return }
+                doc.replaceNotes(previous, inTrackAt: trackIndex)
+            }
+        }
     }
 
     public func setTempo(_ tempo: Double) {
