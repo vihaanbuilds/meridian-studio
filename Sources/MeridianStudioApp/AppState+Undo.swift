@@ -7,8 +7,14 @@ extension AppState {
     /// `selectedTrackIndex` at Stop time, and undoing a track change mid-take
     /// would file the take on the wrong track — the same hazard
     /// `selectTrack(at:)`/`removeTrack(at:)` already guard against.
-    var canUndo: Bool { !isRecording && document.undoManager.canUndo }
-    var canRedo: Bool { !isRecording && document.undoManager.canRedo }
+    var canUndo: Bool {
+        if let fieldEditor = activeFieldEditor { return fieldEditor.undoManager?.canUndo ?? false }
+        return !isRecording && document.undoManager.canUndo
+    }
+    var canRedo: Bool {
+        if let fieldEditor = activeFieldEditor { return fieldEditor.undoManager?.canRedo ?? false }
+        return !isRecording && document.undoManager.canRedo
+    }
 
     func undo() {
         if let fieldEditor = activeFieldEditor {
