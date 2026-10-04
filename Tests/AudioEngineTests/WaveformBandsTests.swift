@@ -230,7 +230,7 @@ final class WaveformBandsTests: XCTestCase {
     func testSliceOfDegenerateRangeReturnsEmptyBands() {
         let bands = WaveformBands(low: [0, 1, 2, 3], mid: [10, 11, 12, 13], high: [20, 21, 22, 23])
 
-        let sliced = bands.slice(fromSeconds: 1, toSeconds: 1, sampleRate: 44100)
+        let sliced = bands.slice(fromSeconds: 0.005, toSeconds: 0.005, sampleRate: 44100)
 
         XCTAssertTrue(sliced.low.isEmpty)
         XCTAssertTrue(sliced.mid.isEmpty)

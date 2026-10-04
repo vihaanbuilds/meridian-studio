@@ -155,7 +155,7 @@ public struct WaveformBands: Sendable {
         let bucketSeconds = Double(Self.samplesPerBucket) / sampleRate
         let startBucket = max(0, Int((fromSeconds / bucketSeconds).rounded(.down)))
         let endBucket = min(low.count, Int((toSeconds / bucketSeconds).rounded(.up)))
-        guard startBucket < endBucket else { return WaveformBands(low: [], mid: [], high: []) }
+        guard fromSeconds < toSeconds, startBucket < endBucket else { return WaveformBands(low: [], mid: [], high: []) }
         return WaveformBands(low: Array(low[startBucket..<endBucket]), mid: Array(mid[startBucket..<endBucket]), high: Array(high[startBucket..<endBucket]))
     }
 
